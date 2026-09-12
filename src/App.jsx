@@ -17,8 +17,8 @@ const PROJECTS = [
     blurb:
       "A production accountability app — goal tracking, daily behavior logging, and automated weekly reports with mood and completion-rate analytics. Live on Oracle Cloud over HTTPS.",
     stack: ["Java", "Spring Boot", "React", "PostgreSQL", "Redis", "Docker"],
-    link: { label: "latesailor.dev", href: "https://latesailor.dev" },
-    demo: { domain: "latesailor.dev", tint: "#30d158", image: mordiShot },
+    link: { label: "mordi.latesailor.dev", href: "https://mordi.latesailor.dev" },
+    demo: { domain: "mordi.latesailor.dev", tint: "#30d158", image: mordiShot },
   },
   {
     name: "Lonely Chess",
