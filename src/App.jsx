@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import mordiShot from "./assets/screenshots/mordi.png";
 import lonelyChessShot from "./assets/screenshots/lonely-chess.png";
+import pdfyierShot from "./assets/screenshots/pdfyier.png";
 import profilePhoto from "./assets/profile.jpg";
 
 /* =========================================================================
@@ -31,6 +32,14 @@ const PROJECTS = [
     },
     demo: { domain: "lonely-chess-cs-420.vercel.app", tint: "#bf5af2", image: lonelyChessShot },
   },
+  {
+    name: "pdfyier",
+    blurb:
+      "Turn a batch of images into a single PDF, right in the browser — drag to reorder pages, name the file, download. Nothing uploaded is ever written to disk or kept after the download finishes.",
+    stack: ["Python", "FastAPI", "ImageMagick", "nginx", "Docker"],
+    link: { label: "pdfyier.latesailor.dev", href: "https://pdfyier.latesailor.dev" },
+    demo: { domain: "pdfyier.latesailor.dev", tint: "#ff453a", image: pdfyierShot },
+  },
 ];
 
 const TECH = [
@@ -49,6 +58,7 @@ const TECH = [
     items: [
       ["Spring Boot", "spring"],
       ["Spring Security", "spring"],
+      ["FastAPI", "fastapi"],
       ["Node.js", "nodejs"],
       ["PostgreSQL", "postgresql"],
       ["Redis", "redis"],
@@ -82,6 +92,7 @@ const TECH = [
       ["Docker", "docker"],
       ["Kubernetes", "kubernetes"],
       ["nginx", "nginx"],
+      ["ImageMagick", "imagemagick"],
       ["Git", "git"],
       ["GitHub", "github"],
       ["GitHub Actions", "githubactions"],
