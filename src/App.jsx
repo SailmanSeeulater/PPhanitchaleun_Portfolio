@@ -383,7 +383,43 @@ const THEMES = [
   { id: "synthwave", name: "Purple & Hot Pink", swatch: ["#1a0b2e", "#ff4fd8"] },
 ];
 
-const SC_USER_URL = "https://api.soundcloud.com/users/1096592947";
+// Your GoatCounter site code, e.g. "perfect" for https://perfect.goatcounter.com
+const GOATCOUNTER_CODE = "latesailor";
+
+function useAnalytics() {
+  useEffect(() => {
+    if (!GOATCOUNTER_CODE || document.querySelector("script[data-goatcounter]")) return;
+    const s = document.createElement("script");
+    s.async = true;
+    s.src = "https://gc.zgo.at/count.js";
+    s.dataset.goatcounter = `https://${GOATCOUNTER_CODE}.goatcounter.com/count`;
+    document.body.appendChild(s);
+  }, []);
+}
+
+function VisitorCount() {
+  const [count, setCount] = useState(null);
+
+  useEffect(() => {
+    if (!GOATCOUNTER_CODE) return;
+    const ctrl = new AbortController();
+    fetch(`https://${GOATCOUNTER_CODE}.goatcounter.com/counter/TOTAL.json`, { signal: ctrl.signal })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((d) => setCount(Number(String(d.count).replace(/\D/g, ""))))
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, []);
+
+  if (!count) return null;
+  return (
+    <span className="footer__visits">
+      <span className="footer__pulse" aria-hidden="true" />
+      {count.toLocaleString("en-US")} {count === 1 ? "visitor" : "visitors"} so far
+    </span>
+  );
+}
+
+const SC_USER_URL ="https://api.soundcloud.com/users/1096592947";
 const SC_PROFILE = "https://soundcloud.com/latersellyoulater";
 let scApiPromise;
 
@@ -731,6 +767,7 @@ function ThemePicker() {
 export default function App() {
   const [techRef, techInView] = useInView({ threshold: 0.2 });
   const [activeSkill, setActiveSkill] = useState(null);
+  useAnalytics();
 
   const handleSelectSkill = (name, rect) => {
     setActiveSkill((prev) => {
@@ -849,6 +886,7 @@ export default function App() {
 
       <footer className="footer">
         <span>© {new Date().getFullYear()} Perfect Phanitchaleun</span>
+        <VisitorCount />
         <span>San Diego based and originally from Laos</span>
       </footer>
 
@@ -1345,6 +1383,15 @@ html{scroll-behavior:smooth;background:var(--bg);}
   border-top:1px solid var(--line);
   color:var(--dim);font-size:13px;
 }
+.footer__visits{display:inline-flex;align-items:center;gap:8px;}
+.footer__pulse{
+  position:relative;width:7px;height:7px;border-radius:50%;background:var(--accent-fill);
+}
+.footer__pulse::after{
+  content:"";position:absolute;inset:0;border-radius:50%;background:var(--accent-fill);
+  animation:visitPulse 1.8s var(--ease) infinite;
+}
+@keyframes visitPulse{from{transform:scale(1);opacity:.6;}to{transform:scale(2.8);opacity:0;}}
 
 /* ---------- RESPONSIVE ---------- */
 @media (max-width:760px){
@@ -1361,7 +1408,7 @@ html{scroll-behavior:smooth;background:var(--bg);}
   html{scroll-behavior:auto;}
   .project,.badge{opacity:1 !important;transform:none !important;transition:none !important;}
   .window,.social,.badge__disc,.nav__links a::after,.project__link,.theme-toggle{transition:none !important;}
-  .skill-bubble,.theme-menu,.bg-dots,.dock__eq i{animation:none !important;}
+  .skill-bubble,.theme-menu,.bg-dots,.dock__eq i,.footer__pulse::after{animation:none !important;}
   .dock__panel,.dock__tab{transition:none !important;}
 }
 `;
