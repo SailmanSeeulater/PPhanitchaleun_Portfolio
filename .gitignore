@@ -26,5 +26,11 @@ dist-ssr
 # Claude Code
 .claude/
 
+# Codex
+.codex
+
+# Agents
+.agents 
+
 # Impeccable design tool artifacts
 .impeccable/

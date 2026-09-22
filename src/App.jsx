@@ -29,7 +29,7 @@ const PROJECTS = [
     skills: ["JavaScript", "HTML5", "CSS3", "SQL", "JUnit", "Mockito", "ESLint", "Vitest", "Linux", "Git", "GitHub"],
     live: "https://mordi.latesailor.dev",
     repo: `${GITHUB}/Mordi`,
-    demo: { domain: "mordi.latesailor.dev", image: mordiShot, height: 2177 },
+    demo: { domain: "mordi.latesailor.dev", image: mordiShot, height: 1315 },
   },
   {
     name: "Lonely Chess",
@@ -250,22 +250,19 @@ function TechBadge({ name, slug, delay, onSelect }) {
   );
 }
 
-/* ---- Browser-window preview that scrolls through the live site ---- */
+/* ---- Browser-window preview: pans on hover, or hand-scrolls when the visitor asks ---- */
 function ScrollPreview({ project }) {
   const frameRef = useRef(null);
   const imgRef = useRef(null);
   const onScreen = useOnScreen(frameRef, 0.6);
   const [pan, setPan] = useState(0);
+  const [manual, setManual] = useState(false);
 
   useEffect(() => {
     const frame = frameRef.current;
     const img = imgRef.current;
     if (!frame || !img) return;
-    const measure = () => {
-      if (!img.naturalWidth) return;
-      const rendered = frame.clientWidth * (img.naturalHeight / img.naturalWidth);
-      setPan(Math.max(0, Math.round(rendered - frame.clientHeight)));
-    };
+    const measure = () => setPan(Math.max(0, Math.round(frame.scrollHeight - frame.clientHeight)));
     const ro = new ResizeObserver(measure);
     ro.observe(frame);
     img.addEventListener("load", measure);
@@ -277,34 +274,66 @@ function ScrollPreview({ project }) {
   }, []);
 
   const duration = Math.min(Math.max(pan / 150, 4), 16);
+  const canPan = pan > 24;
+
+  const toggleManual = () => {
+    setManual((m) => {
+      if (m && frameRef.current) frameRef.current.scrollTop = 0;
+      return !m;
+    });
+  };
 
   return (
-    <a className="project__demo" href={project.live} target="_blank" rel="noreferrer" tabIndex={-1} aria-hidden="true">
+    <div className="project__demo">
       <div className="window">
         <div className="window__bar">
           <span className="dot" />
           <span className="dot" />
           <span className="dot" />
           <div className="window__url">{project.demo.domain}</div>
+          {canPan && (
+            <button
+              type="button"
+              className="window__mode"
+              aria-pressed={manual}
+              onClick={toggleManual}
+              title={manual ? "Back to automatic preview" : "Scroll this preview yourself"}
+            >
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="8" y="3" width="8" height="18" rx="4" />
+                <path d="M12 7v3" />
+              </svg>
+              {manual ? "Scrolling" : "Scroll it"}
+            </button>
+          )}
         </div>
-        <div
-          ref={frameRef}
-          className={`window__body${pan > 24 ? " can-pan" : ""}${onScreen ? " is-onscreen" : ""}`}
-          style={{ "--pan": `${pan}px`, "--pan-duration": `${duration}s` }}
+        <a
+          className="window__view"
+          href={project.live}
+          target="_blank"
+          rel="noreferrer"
+          tabIndex={-1}
+          aria-hidden="true"
         >
-          <img
-            ref={imgRef}
-            className="window__screenshot"
-            src={project.demo.image}
-            alt=""
-            width="1000"
-            height={project.demo.height}
-            loading="lazy"
-            decoding="async"
-          />
-        </div>
+          <div
+            ref={frameRef}
+            className={`window__body${canPan ? " can-pan" : ""}${manual ? " is-manual" : ""}${onScreen ? " is-onscreen" : ""}`}
+            style={{ "--pan": `${pan}px`, "--pan-duration": `${duration}s` }}
+          >
+            <img
+              ref={imgRef}
+              className="window__screenshot"
+              src={project.demo.image}
+              alt=""
+              width="1000"
+              height={project.demo.height}
+              loading="lazy"
+              decoding="async"
+            />
+          </div>
+        </a>
       </div>
-    </a>
+    </div>
   );
 }
 
@@ -1407,37 +1436,60 @@ html{
   background:var(--bg);border-radius:6px;padding:4px 10px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
+.window__mode{
+  position:relative;flex:0 0 auto;
+  display:inline-flex;align-items:center;gap:5px;min-height:26px;
+  padding:4px 10px;border-radius:999px;
+  border:1px solid var(--line);background:transparent;color:var(--muted);
+  font:inherit;font-size:11.5px;line-height:1;cursor:pointer;
+  transition:background .2s var(--ease),color .2s var(--ease);
+}
+.window__mode::before{content:"";position:absolute;inset:-9px -6px;}
+.window__mode:hover{background:var(--line);color:var(--text);}
+.window__mode[aria-pressed="true"]{background:var(--accent-fill);border-color:transparent;color:var(--on-accent);}
+.window__view{display:block;}
 .window__body{
   position:relative;background:var(--placeholder);
   aspect-ratio:16/10;overflow:hidden;
+  overscroll-behavior:contain;scroll-behavior:auto;
 }
 .window__screenshot{
-  position:absolute;left:0;top:0;width:100%;height:auto;display:block;
+  display:block;width:100%;height:auto;
   transform:translateY(0);
   transition:transform 1.2s cubic-bezier(.65,0,.35,1);
 }
-.window__body.can-pan::after{
-  content:"";position:absolute;left:0;right:0;bottom:0;height:34px;pointer-events:none;
-  background:linear-gradient(to top,color-mix(in srgb,var(--shadow) 16%,transparent),transparent);
-  opacity:.8;transition:opacity .4s var(--ease);
-}
 @media (hover:hover){
-  .project:hover .can-pan .window__screenshot,
-  .project:focus-within .can-pan .window__screenshot{
+  .project:hover .can-pan:not(.is-manual) .window__screenshot,
+  .project:focus-within:not(:has(.window__mode:focus)) .can-pan:not(.is-manual) .window__screenshot{
     transform:translateY(calc(-1 * var(--pan)));
     transition:transform var(--pan-duration) cubic-bezier(.37,0,.63,1);
   }
-  .project:hover .can-pan::after{opacity:0;}
 }
 @media (hover:none){
-  .can-pan.is-onscreen .window__screenshot{
-    animation:panLoop calc(var(--pan-duration) * 2 + 3s) cubic-bezier(.45,.05,.55,.95) infinite;
+  .can-pan.is-onscreen:not(.is-manual) .window__screenshot{
+    animation:panLoop calc(var(--pan-duration) * 2 + 3s) cubic-bezier(.37,0,.63,1) infinite;
   }
 }
 @keyframes panLoop{
   0%,15%{transform:translateY(0);}
   50%,65%{transform:translateY(calc(-1 * var(--pan)));}
   100%{transform:translateY(0);}
+}
+.window__body.is-manual{
+  overflow-y:scroll;cursor:grab;
+  scrollbar-width:thin;
+  scrollbar-color:color-mix(in srgb,var(--text) 35%,transparent) transparent;
+}
+.window__body.is-manual:active{cursor:grabbing;}
+.window__body.is-manual .window__screenshot{transform:none;transition:none;animation:none;}
+.window__body.is-manual::-webkit-scrollbar{width:10px;}
+.window__body.is-manual::-webkit-scrollbar-track{background:transparent;}
+.window__body.is-manual::-webkit-scrollbar-thumb{
+  background-color:color-mix(in srgb,var(--text) 35%,transparent);
+  background-clip:padding-box;border:2px solid transparent;border-radius:999px;
+}
+.window__body.is-manual::-webkit-scrollbar-thumb:hover{
+  background-color:color-mix(in srgb,var(--text) 55%,transparent);
 }
 
 /* ---------- TECH ---------- */
@@ -1654,9 +1706,8 @@ html{
 @media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto;}
   .project,.badge{opacity:1 !important;transform:none !important;transition:none !important;}
-  .window,.social,.badge__disc,.nav__links a::after,.site .project__link,.theme-toggle,.btn-primary,.window__screenshot{transition:none !important;}
-  .window__screenshot{transform:none !important;animation:none !important;}
-  .window__body.can-pan::after{display:none;}
+  .window,.social,.badge__disc,.nav__links a::after,.site .project__link,.theme-toggle,.btn-primary,.window__mode{transition:none !important;}
+  .window__screenshot{transform:none !important;transition:none !important;animation:none !important;}
   .skill-bubble,.theme-menu,.bg-dots,.dock__eq i,.footer__pulse::after,.typed__caret::after{animation:none !important;}
   .typed__caret{display:none;}
   .dock__panel,.dock__tab{transition:none !important;}
