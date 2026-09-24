@@ -1344,14 +1344,14 @@ html{
   position:absolute;inset:-26px;
   background-image:radial-gradient(circle,color-mix(in srgb,var(--text) 9%,transparent) 2px,transparent 2.6px);
   background-size:26px 26px;
-  scale:calc(1 + var(--beat, 0) * .045);
+  scale:calc(1 + var(--beat, 0) * .012);
   animation:dotsDrift 7s linear infinite;will-change:transform;
 }
 .bg-dots::after{
   content:"";position:absolute;inset:0;
-  background-image:radial-gradient(circle,color-mix(in srgb,var(--accent-fill) 34%,transparent) 2.4px,transparent 3.1px);
+  background-image:radial-gradient(circle,color-mix(in srgb,var(--accent-fill) 22%,transparent) 2.2px,transparent 2.8px);
   background-size:26px 26px;
-  opacity:var(--beat, 0);
+  opacity:calc(var(--beat, 0) * .45);
 }
 @keyframes dotsDrift{to{transform:translate(26px,-26px);}}
 .bg-grain{
