@@ -4,6 +4,8 @@ import mordiShot from "./assets/screenshots/mordi-full.webp";
 import lonelyChessShot from "./assets/screenshots/lonely-chess-full.webp";
 import pdfyierShot from "./assets/screenshots/pdfyier-full.webp";
 import profilePhoto from "./assets/profile.webp";
+import WebAudioAnalyser from "web-audio-analyser";
+import { TRACKS } from "./tracks";
 
 /* =========================================================================
    Perfect Phanitchaleun: personal portfolio.
@@ -537,38 +539,42 @@ function VisitorCount() {
   );
 }
 
-const SC_USER_URL = "https://api.soundcloud.com/users/1096592947";
 const SC_PROFILE = "https://soundcloud.com/latersellyoulater";
-let scApiPromise;
 
-function loadSoundCloudApi() {
-  if (window.SC?.Widget) return Promise.resolve(window.SC);
-  scApiPromise ??= new Promise((resolve, reject) => {
-    const s = document.createElement("script");
-    s.src = "https://w.soundcloud.com/player/api.js";
-    s.async = true;
-    s.onload = () => resolve(window.SC);
-    s.onerror = () => {
-      scApiPromise = undefined;
-      reject(new Error("SoundCloud widget API failed to load"));
-    };
-    document.head.appendChild(s);
-  });
-  return scApiPromise;
+let audioGraph = null;
+
+function connectAnalyser(audio) {
+  if (audioGraph) return audioGraph;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return null;
+  try {
+    const ctx = new Ctx();
+    const analyser = WebAudioAnalyser(audio, ctx, { audible: false });
+    analyser.analyser.fftSize = 512;
+    analyser.analyser.smoothingTimeConstant = 0.72;
+    const gain = ctx.createGain();
+    analyser.output.connect(gain);
+    gain.connect(ctx.destination);
+    audioGraph = { ctx, analyser, gain };
+  } catch {
+    audioGraph = null;
+  }
+  return audioGraph;
 }
 
-const artwork = (s) => (s?.artwork_url || s?.user?.avatar_url || "").replace("-large", "-t200x200");
+const bandLevel = (bins, from, to) => {
+  let sum = 0;
+  for (let i = from; i < to; i++) sum += bins[i];
+  return sum / ((to - from) * 255);
+};
 
 function SoundDock() {
   const [open, setOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const [ready, setReady] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const [playing, setPlaying] = useState(false);
-  const [sound, setSound] = useState(null);
-  const [sounds, setSounds] = useState([]);
   const [index, setIndex] = useState(0);
+  const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const [live, setLive] = useState(false);
   const [volume, setVolume] = useState(() => {
     try {
       const v = Number(localStorage.getItem("volume"));
@@ -577,64 +583,27 @@ function SoundDock() {
       return 70;
     }
   });
-  const volumeRef = useRef(volume);
   const lastVolumeRef = useRef(volume || 70);
-  const iframeRef = useRef(null);
-  const widgetRef = useRef(null);
+  const audioRef = useRef(null);
   const tabRef = useRef(null);
   const panelRef = useRef(null);
+  const eqRef = useRef(null);
+  const track = TRACKS[index];
 
   useEffect(() => {
-    volumeRef.current = volume;
-    widgetRef.current?.setVolume(volume);
+    const audio = audioRef.current;
+    if (audioGraph) {
+      audioGraph.gain.gain.value = volume / 100;
+      audio.volume = 1;
+    } else {
+      audio.volume = volume / 100;
+    }
     try {
       localStorage.setItem("volume", String(volume));
     } catch {
       /* storage unavailable */
     }
-  }, [volume]);
-
-  useEffect(() => {
-    if (!mounted) return;
-    let cancelled = false;
-    let isReady = false;
-    const timeout = setTimeout(() => {
-      if (!cancelled && !isReady) setFailed(true);
-    }, 15000);
-
-    loadSoundCloudApi()
-      .then((SC) => {
-        if (cancelled || !iframeRef.current) return;
-        const w = SC.Widget(iframeRef.current);
-        widgetRef.current = w;
-        const E = SC.Widget.Events;
-        const sync = () => {
-          w.getCurrentSound((s) => s && setSound(s));
-          w.getCurrentSoundIndex((i) => setIndex(i));
-          w.getSounds((list) => setSounds(list || []));
-        };
-        w.bind(E.READY, () => {
-          isReady = true;
-          setReady(true);
-          setFailed(false);
-          w.setVolume(volumeRef.current);
-          sync();
-        });
-        w.bind(E.PLAY, () => {
-          setPlaying(true);
-          w.setVolume(volumeRef.current);
-          sync();
-        });
-        w.bind(E.PAUSE, () => setPlaying(false));
-        w.bind(E.FINISH, () => setPlaying(false));
-        w.bind(E.PLAY_PROGRESS, (e) => setProgress(e.relativePosition));
-      })
-      .catch(() => !cancelled && setFailed(true));
-    return () => {
-      cancelled = true;
-      clearTimeout(timeout);
-    };
-  }, [mounted]);
+  }, [volume, live]);
 
   useEffect(() => {
     if (!open) return;
@@ -649,12 +618,84 @@ function SoundDock() {
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
-  const w = widgetRef.current;
+  useEffect(() => {
+    if (!live || prefersReducedMotion()) return;
+    const fx = document.querySelector(".bg-fx");
+    const eq = eqRef.current;
+    const level = { beat: 0, b1: 0, b2: 0, b3: 0 };
+    const avg = { bass: 0, b1: 0, b2: 0, b3: 0 };
+    const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+    let raf;
+
+    const tick = () => {
+      const bins = audioGraph.analyser.frequencies();
+      const raw = { bass: bandLevel(bins, 1, 4), b1: bandLevel(bins, 1, 5), b2: bandLevel(bins, 5, 32), b3: bandLevel(bins, 32, 100) };
+      // compare against a running average so kicks spike even in bass-heavy mixes
+      for (const k in avg) avg[k] += (raw[k] - avg[k]) * 0.05;
+      const target = playing
+        ? {
+            beat: clamp((raw.bass - avg.bass) * 10 + raw.bass * 0.12, 0, 1),
+            b1: clamp(0.4 + (raw.b1 - avg.b1) * 10, 0.08, 1),
+            b2: clamp(0.4 + (raw.b2 - avg.b2) * 13, 0.08, 1),
+            b3: clamp(0.35 + (raw.b3 - avg.b3) * 16, 0.08, 1),
+          }
+        : { beat: 0, b1: 0, b2: 0, b3: 0 };
+      let active = playing;
+      for (const k in level) {
+        level[k] += (target[k] - level[k]) * (target[k] > level[k] ? 0.55 : 0.16);
+        if (level[k] > 0.004) active = true;
+      }
+      fx?.style.setProperty("--beat", level.beat.toFixed(3));
+      eq?.style.setProperty("--b1", level.b1.toFixed(3));
+      eq?.style.setProperty("--b2", level.b2.toFixed(3));
+      eq?.style.setProperty("--b3", level.b3.toFixed(3));
+      if (active) raf = requestAnimationFrame(tick);
+      else fx?.style.setProperty("--beat", "0");
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [live, playing]);
+
+  const play = (i = index) => {
+    const audio = audioRef.current;
+    const graph = connectAnalyser(audio);
+    if (graph && !live) setLive(true);
+    graph?.ctx.resume();
+    if (i !== index) {
+      setIndex(i);
+      setProgress(0);
+      audio.src = TRACKS[i].src;
+    } else if (!audio.getAttribute("src")) {
+      audio.src = TRACKS[i].src;
+    }
+    setFailed(false);
+    audio.play().catch(() => {});
+  };
+
+  const toggle = () => {
+    if (playing) audioRef.current.pause();
+    else play();
+  };
+
+  const skip = (step) => {
+    const audio = audioRef.current;
+    if (step < 0 && audio.currentTime > 3) {
+      audio.currentTime = 0;
+      return;
+    }
+    play((index + step + TRACKS.length) % TRACKS.length);
+  };
+
   const seek = (e) => {
+    const audio = audioRef.current;
     const ratio = Number(e.target.value) / 1000;
     setProgress(ratio);
-    w?.getDuration((d) => w.seekTo(ratio * d));
+    const duration = audio.duration || track.duration;
+    if (!audio.getAttribute("src")) audio.src = track.src;
+    audio.currentTime = ratio * duration;
   };
+
   const toggleMute = () => {
     if (volume > 0) {
       lastVolumeRef.current = volume;
@@ -663,107 +704,99 @@ function SoundDock() {
       setVolume(lastVolumeRef.current || 70);
     }
   };
-  const loaded = sounds.map((s, i) => ({ s, i })).filter(({ s }) => s.title);
 
   return (
     <div className={`dock ${open ? "is-open" : ""}`}>
       <div ref={panelRef} className="dock__panel" id="dock-panel" role="region" aria-label="Music player" tabIndex={-1} inert={!open}>
-        {failed && !ready ? (
-          <p className="dock__status">
-            SoundCloud didn't load, it may be blocked on this network.{" "}
-            <a href={SC_PROFILE} target="_blank" rel="noreferrer">Listen on SoundCloud instead</a>.
-          </p>
-        ) : !ready ? (
-          <p className="dock__status" role="status">Loading tracks from SoundCloud…</p>
-        ) : (
-          <>
-            <div className="dock__now">
-              {artwork(sound) && <img className="dock__art" src={artwork(sound)} alt="" width="56" height="56" />}
-              <div className="dock__meta">
-                <a className="dock__title" href={sound?.permalink_url} target="_blank" rel="noreferrer">
-                  {sound?.title}
-                </a>
-                <a className="dock__artist" href={SC_PROFILE} target="_blank" rel="noreferrer">
-                  {sound?.user?.username}
-                </a>
-              </div>
-            </div>
-
-            <input
-              className="dock__range dock__seek"
-              type="range"
-              min="0"
-              max="1000"
-              value={Math.round(progress * 1000)}
-              onChange={seek}
-              aria-label="Seek"
-              style={{ "--p": `${progress * 100}%` }}
-            />
-
-            <div className="dock__controls">
-              <button type="button" onClick={() => w?.prev()} aria-label="Previous track">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z" /></svg>
-              </button>
-              <button type="button" className="dock__play" onClick={() => w?.toggle()} aria-label={playing ? "Pause" : "Play"}>
-                {playing ? (
-                  <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
-                ) : (
-                  <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
-                )}
-              </button>
-              <button type="button" onClick={() => w?.next()} aria-label="Next track">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z" /></svg>
-              </button>
-            </div>
-
-            <div className="dock__volume">
-              <button type="button" onClick={toggleMute} aria-label={volume > 0 ? "Mute" : "Unmute"}>
-                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" />
-                  {volume === 0 ? (
-                    <path d="m16 9.5 5 5m0-5-5 5" />
-                  ) : (
-                    <>
-                      <path d="M15.5 9.2a4 4 0 0 1 0 5.6" />
-                      {volume > 50 && <path d="M18.3 6.5a8 8 0 0 1 0 11" />}
-                    </>
-                  )}
-                </svg>
-              </button>
-              <input
-                className="dock__range"
-                type="range"
-                min="0"
-                max="100"
-                value={volume}
-                onChange={(e) => setVolume(Number(e.target.value))}
-                aria-label="Volume"
-                style={{ "--p": `${volume}%` }}
-              />
-            </div>
-
-            {loaded.length > 0 && (
-              <ol className="dock__list" aria-label="Tracks">
-                {loaded.map(({ s, i }) => (
-                  <li key={s.id}>
-                    <button
-                      type="button"
-                      className={i === index ? "is-current" : ""}
-                      aria-current={i === index ? "true" : undefined}
-                      onClick={() => w?.skip(i)}
-                    >
-                      {s.title}
-                    </button>
-                  </li>
-                ))}
-              </ol>
-            )}
-
-            <a className="dock__credit" href={SC_PROFILE} target="_blank" rel="noreferrer">
-              Streaming from SoundCloud
+        <div className="dock__now">
+          <img className="dock__art" src={track.art} alt="" width="56" height="56" />
+          <div className="dock__meta">
+            <a className="dock__title" href={track.soundcloud} target="_blank" rel="noreferrer">
+              {track.title}
             </a>
-          </>
+            <a className="dock__artist" href={SC_PROFILE} target="_blank" rel="noreferrer">
+              Later
+            </a>
+          </div>
+        </div>
+
+        {failed && (
+          <p className="dock__status" role="status">
+            This track didn't load. <a href={track.soundcloud} target="_blank" rel="noreferrer">Play it on SoundCloud</a>.
+          </p>
         )}
+
+        <input
+          className="dock__range dock__seek"
+          type="range"
+          min="0"
+          max="1000"
+          value={Math.round(progress * 1000)}
+          onChange={seek}
+          aria-label="Seek"
+          style={{ "--p": `${progress * 100}%` }}
+        />
+
+        <div className="dock__controls">
+          <button type="button" onClick={() => skip(-1)} aria-label="Previous track">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z" /></svg>
+          </button>
+          <button type="button" className="dock__play" onClick={toggle} aria-label={playing ? "Pause" : "Play"}>
+            {playing ? (
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
+            ) : (
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+            )}
+          </button>
+          <button type="button" onClick={() => skip(1)} aria-label="Next track">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z" /></svg>
+          </button>
+        </div>
+
+        <div className="dock__volume">
+          <button type="button" onClick={toggleMute} aria-label={volume > 0 ? "Mute" : "Unmute"}>
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" />
+              {volume === 0 ? (
+                <path d="m16 9.5 5 5m0-5-5 5" />
+              ) : (
+                <>
+                  <path d="M15.5 9.2a4 4 0 0 1 0 5.6" />
+                  {volume > 50 && <path d="M18.3 6.5a8 8 0 0 1 0 11" />}
+                </>
+              )}
+            </svg>
+          </button>
+          <input
+            className="dock__range"
+            type="range"
+            min="0"
+            max="100"
+            value={volume}
+            onChange={(e) => setVolume(Number(e.target.value))}
+            aria-label="Volume"
+            style={{ "--p": `${volume}%` }}
+          />
+        </div>
+
+        <ol className="dock__list" aria-label="Tracks">
+          {TRACKS.map((t, i) => (
+            <li key={t.src}>
+              <button
+                type="button"
+                className={i === index ? "is-current" : ""}
+                aria-current={i === index ? "true" : undefined}
+                onClick={() => play(i)}
+              >
+                {t.title}
+              </button>
+            </li>
+          ))}
+        </ol>
+
+        <a className="dock__credit" href={SC_PROFILE} target="_blank" rel="noreferrer">
+          Also on SoundCloud
+        </a>
       </div>
 
       <button
@@ -772,26 +805,29 @@ function SoundDock() {
         className="dock__tab"
         aria-expanded={open}
         aria-controls="dock-panel"
-        onClick={() => {
-          setMounted(true);
-          setOpen((o) => !o);
-        }}
+        onClick={() => setOpen((o) => !o)}
       >
-        <span className={`dock__eq ${playing ? "is-playing" : ""}`} aria-hidden="true">
+        <span ref={eqRef} className={`dock__eq${playing ? " is-playing" : ""}${live ? " is-live" : ""}`} aria-hidden="true">
           <i /><i /><i />
         </span>
-        <span className="dock__tab-label">{playing && sound ? sound.title : "My music"}</span>
+        <span className="dock__tab-label">{playing ? track.title : "My music"}</span>
       </button>
 
-      {mounted && (
-        <iframe
-          ref={iframeRef}
-          className="dock__iframe"
-          title="SoundCloud player"
-          allow="autoplay; encrypted-media"
-          src={`https://w.soundcloud.com/player/?url=${encodeURIComponent(SC_USER_URL)}&auto_play=false&visual=false&show_artwork=false&buying=false&sharing=false&download=false`}
-        />
-      )}
+      <audio
+        ref={audioRef}
+        preload="none"
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => play((index + 1) % TRACKS.length)}
+        onTimeUpdate={(e) => {
+          const a = e.currentTarget;
+          if (a.duration) setProgress(a.currentTime / a.duration);
+        }}
+        onError={() => {
+          setPlaying(false);
+          setFailed(true);
+        }}
+      />
     </div>
   );
 }
@@ -1308,7 +1344,14 @@ html{
   position:absolute;inset:-26px;
   background-image:radial-gradient(circle,color-mix(in srgb,var(--text) 9%,transparent) 2px,transparent 2.6px);
   background-size:26px 26px;
+  scale:calc(1 + var(--beat, 0) * .045);
   animation:dotsDrift 7s linear infinite;will-change:transform;
+}
+.bg-dots::after{
+  content:"";position:absolute;inset:0;
+  background-image:radial-gradient(circle,color-mix(in srgb,var(--accent-fill) 34%,transparent) 2.4px,transparent 3.1px);
+  background-size:26px 26px;
+  opacity:var(--beat, 0);
 }
 @keyframes dotsDrift{to{transform:translate(26px,-26px);}}
 .bg-grain{
@@ -1600,6 +1643,9 @@ html{
 .dock__eq.is-playing i:nth-child(2){animation-delay:-.3s;}
 .dock__eq.is-playing i:nth-child(3){animation-delay:-.6s;}
 @keyframes eq{from{height:3px;}to{height:12px;}}
+.dock__eq.is-live i{animation:none;height:calc(25% + var(--b1, 0) * 75%);}
+.dock__eq.is-live i:nth-child(2){height:calc(25% + var(--b2, 0) * 75%);}
+.dock__eq.is-live i:nth-child(3){height:calc(25% + var(--b3, 0) * 75%);}
 
 .dock__panel{
   width:100%;padding:14px;border-radius:20px;
@@ -1612,7 +1658,7 @@ html{
 }
 .dock__panel:focus{outline:none;}
 .dock.is-open .dock__panel{opacity:1;visibility:visible;transform:none;transition:opacity .25s var(--ease),transform .3s var(--ease);}
-.dock__status{margin:4px 2px;font-size:13px;line-height:1.5;}
+.dock__status{margin:10px 2px 0;font-size:13px;line-height:1.5;}
 .dock__status a{text-decoration:underline;text-underline-offset:3px;}
 .dock__now{display:flex;align-items:center;gap:12px;}
 .dock__art{width:56px;height:56px;border-radius:12px;object-fit:cover;flex:0 0 auto;}
@@ -1656,7 +1702,6 @@ html{
 .dock__list button.is-current{color:var(--accent-fill);text-decoration:underline;text-underline-offset:3px;}
 .dock__credit{display:block;margin-top:10px;font-size:11.5px;color:var(--muted);text-align:right;}
 .dock__credit:hover{color:var(--text);}
-.dock__iframe{position:absolute;width:1px;height:1px;border:0;opacity:0;pointer-events:none;}
 
 /* ---------- CONTACT ---------- */
 .contact{
