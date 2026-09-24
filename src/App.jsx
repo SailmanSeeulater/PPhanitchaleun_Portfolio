@@ -13,6 +13,9 @@ import profilePhoto from "./assets/profile.webp";
 const DEVICON = "https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons";
 const GITHUB = "https://github.com/SailmanSeeulater";
 
+const rich = (text) =>
+  text.split(/\*\*(.+?)\*\*/g).map((part, i) => (i % 2 ? <mark key={i} className="hl">{part}</mark> : part));
+
 const prefersReducedMotion = () =>
   typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
@@ -21,8 +24,8 @@ const PROJECTS = [
     name: "Mordi",
     summary: "A goal tracker with daily logs and weekly mood reports, self-hosted and shipped through CI.",
     bullets: [
-      "Audited the API and found a JWT signing secret and database password committed in plaintext since the first commit. Rotated both, closed an account enumeration hole in login, and added Redis backed rate limiting.",
-      "Set up a GitHub Actions CI pipeline (JUnit, Mockito, ESLint, Vitest, production build) that has caught 9 defects before deploy, including one that would have crashed the API on startup.",
+      "Audited the API and found a JWT signing secret and database password committed **in plaintext since the first commit**. Rotated both, closed an account enumeration hole in login, and added Redis backed rate limiting.",
+      "Set up a GitHub Actions CI pipeline (JUnit, Mockito, ESLint, Vitest, production build) that has **caught 9 defects before deploy**, including one that would have crashed the API on startup.",
       "Built the Spring Boot REST API with JWT auth for goal tracking, daily logging, and automatic weekly mood and completion reports. Every schema change ships through a reviewed Flyway migration instead of framework auto generation.",
     ],
     stack: ["Java", "Spring Boot", "Spring Security", "React", "PostgreSQL", "Redis", "Docker", "nginx", "GitHub Actions"],
@@ -37,8 +40,8 @@ const PROJECTS = [
     credit: "Built with Nicolaus ReyasBautista · CS 420 final project",
     bullets: [
       "Co-designed an esoteric language where legal PGN chess notation executes as source code, then built the Python interpreter for it: a state machine parsing moves into integer and string declarations, loops, conditionals, modulo, and four function arithmetic.",
-      "Implemented FizzBuzz (1 to 100) as a 2,669 move chess game, exercising nested conditionals, string concatenation, and implicit else branching.",
-      "Ported the interpreter to TypeScript so programs run entirely in the browser, on a Next.js site with a live PGN runner, a playable board, and five unabridged sample programs.",
+      "Implemented FizzBuzz (1 to 100) as a **2,669 move chess game**, exercising nested conditionals, string concatenation, and implicit else branching.",
+      "Ported the interpreter to TypeScript so programs run **entirely in the browser**, on a Next.js site with a live PGN runner, a playable board, and five unabridged sample programs.",
     ],
     stack: ["Python", "TypeScript", "Next.js", "PGN Notation", "Interpreter Design"],
     skills: ["React", "CSS3", "nginx", "Linux", "Git", "GitHub"],
@@ -51,7 +54,7 @@ const PROJECTS = [
     summary: "Turn a batch of images into one PDF without your files ever touching a disk.",
     bullets: [
       "Drop or select a batch of images (JPG, PNG, WEBP, BMP, TIFF, GIF), drag to reorder pages, then name and download one merged PDF.",
-      "Runs through nginx and a FastAPI backend that shells out to ImageMagick and streams the finished PDF back in the same request. Uploads never touch persistent disk, temp storage is RAM backed on both host and container.",
+      "Runs through nginx and a FastAPI backend that shells out to ImageMagick and streams the finished PDF back in the same request. **Uploads never touch persistent disk**, temp storage is RAM backed on both host and container.",
     ],
     stack: ["Python", "FastAPI", "ImageMagick", "nginx", "Docker", "Oracle Cloud"],
     skills: ["HTML5", "Linux", "Git", "GitHub"],
@@ -219,34 +222,35 @@ function TypedName() {
   );
 }
 
-/* ---- Circular tech badge with graceful fallback ---- */
-function TechBadge({ name, slug, delay, onSelect }) {
+/* ---- Tech chip: icon + name, opens the which-projects bubble ---- */
+function TechBadge({ name, slug, delay, active, onSelect }) {
   const [failed, setFailed] = useState(!slug);
   return (
-    <div className="badge" style={{ transitionDelay: `${delay}ms` }}>
-      <button
-        type="button"
-        className="badge__disc"
-        aria-haspopup="dialog"
-        aria-label={`${name}: see which projects use it`}
-        onClick={(e) => onSelect(name, e.currentTarget)}
-      >
+    <button
+      type="button"
+      className="chip"
+      style={{ transitionDelay: `${delay}ms` }}
+      aria-haspopup="dialog"
+      aria-expanded={active}
+      onClick={(e) => onSelect(name, e.currentTarget)}
+    >
+      <span className="chip__icon" aria-hidden="true">
         {failed ? (
-          <span className="badge__fallback" aria-hidden="true">{name.charAt(0)}</span>
+          <span className="chip__fallback">{name.charAt(0)}</span>
         ) : (
           <img
             src={`${DEVICON}/${slug}/${slug}-original.svg`}
             alt=""
-            width="34"
-            height="34"
+            width="16"
+            height="16"
             loading="lazy"
             decoding="async"
             onError={() => setFailed(true)}
           />
         )}
-      </button>
-      <span className="badge__name" aria-hidden="true">{name}</span>
-    </div>
+      </span>
+      {name}
+    </button>
   );
 }
 
@@ -356,7 +360,7 @@ function ProjectRow({ project, index }) {
         {project.credit && <p className="project__credit">{project.credit}</p>}
         <ul className="bullets project__bullets">
           {project.bullets.map((b, i) => (
-            <li key={i}>{b}</li>
+            <li key={i}>{rich(b)}</li>
           ))}
         </ul>
 
@@ -421,7 +425,7 @@ function SkillBubble({ skill, onClose }) {
       if (e.key === "Escape") onClose(true);
     };
     const onOutside = (e) => {
-      if (panelRef.current && !panelRef.current.contains(e.target) && !e.target.closest(".badge__disc")) {
+      if (panelRef.current && !panelRef.current.contains(e.target) && !e.target.closest(".chip")) {
         onClose(false);
       }
     };
@@ -450,7 +454,7 @@ function SkillBubble({ skill, onClose }) {
       tabIndex={-1}
       style={{ left: skill.x, top: skill.y }}
       onBlur={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget) && e.relatedTarget && !e.relatedTarget.closest(".badge__disc")) {
+        if (!e.currentTarget.contains(e.relatedTarget) && e.relatedTarget && !e.relatedTarget.closest(".chip")) {
           onClose(false);
         }
       }}
@@ -978,7 +982,7 @@ export default function App() {
           aria-labelledby="tech-title"
         >
           <h2 id="tech-title" className="section__title section__title--tight">Tech Stack &amp; Skills</h2>
-          <p className="tech__hint">Click a badge to see which projects use it.</p>
+          <p className="tech__hint">Click a skill to see which projects use it.</p>
           <div className="tech__rows">
             {TECH.map((row) => {
               const id = `tech-${row.label.toLowerCase().replace(/[^a-z]+/g, "-")}`;
@@ -987,7 +991,7 @@ export default function App() {
                   <span className="tech__label" id={id}>{row.label}</span>
                   <div className="tech__badges">
                     {row.items.map(([name, slug], i) => (
-                      <TechBadge key={name} name={name} slug={slug} delay={i * 60} onSelect={handleSelectSkill} />
+                      <TechBadge key={name} name={name} slug={slug} delay={i * 40} active={activeSkill?.name === name} onSelect={handleSelectSkill} />
                     ))}
                   </div>
                 </div>
@@ -1324,20 +1328,25 @@ html{
 .section--projects{padding-top:clamp(40px,6vw,72px);}
 .section__title{
   font-family:var(--font-display);
-  font-size:clamp(30px,4.6vw,48px);line-height:1.1;
-  letter-spacing:.01em;margin:0 0 clamp(36px,5vw,64px);
+  font-size:clamp(36px,5.6vw,64px);line-height:1.02;
+  letter-spacing:.01em;margin:0 0 clamp(40px,6vw,72px);
 }
-.section__title--tight{margin-bottom:12px;}
+.section__title--tight{margin-bottom:14px;}
 
 /* ---------- HERO ---------- */
 .hero{
+  position:relative;
   max-width:var(--maxw);margin:0 auto;
   padding:clamp(40px,7vw,96px) var(--gutter) clamp(24px,4vw,48px);
-  display:flex;align-items:center;gap:clamp(28px,5vw,72px);
+  display:flex;align-items:center;gap:clamp(28px,5vw,64px);
   flex-wrap:wrap;
 }
+.hero::before{
+  content:"";position:absolute;inset:-12% 0;z-index:-1;pointer-events:none;
+  background:radial-gradient(52% 58% at 60% 46%,var(--bg) 38%,color-mix(in srgb,var(--bg) 0%,transparent) 100%);
+}
 .hero__photo{
-  flex:0 0 auto;width:clamp(160px,22vw,260px);aspect-ratio:1;border-radius:28px;
+  flex:0 0 auto;width:clamp(180px,27vw,340px);aspect-ratio:1;border-radius:32px;
   overflow:hidden;
   border:1px solid var(--line);
   box-shadow:0 30px 70px -30px color-mix(in srgb,var(--shadow) 30%,transparent);
@@ -1346,7 +1355,7 @@ html{
 .hero__intro{flex:1 1 380px;min-width:0;}
 .hero__name{
   font-family:var(--font-display);
-  margin:0;font-size:clamp(40px,6.4vw,74px);
+  margin:0;font-size:clamp(40px,5.7vw,68px);
   letter-spacing:.005em;line-height:1.04;
 }
 .typed__word{white-space:nowrap;}
@@ -1378,24 +1387,32 @@ html{
   text-decoration-thickness:2px;text-underline-offset:6px;
 }
 .site .hero__secondary:hover{color:var(--accent-fill);}
-.hero__resume-date{margin:10px 0 0;font-size:12.5px;color:var(--muted);}
+.hero__resume-date{margin:12px 0 0;font-size:13.5px;color:var(--muted);}
 
 /* ---------- PROJECTS ---------- */
-.projects{display:flex;flex-direction:column;gap:clamp(80px,11vw,136px);}
+.projects{display:flex;flex-direction:column;gap:clamp(56px,8vw,96px);}
 .project{
-  display:grid;grid-template-columns:minmax(0,1.12fr) minmax(0,1fr);
-  align-items:center;gap:clamp(28px,5vw,64px);
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);
+  align-items:start;gap:clamp(28px,4.5vw,60px);
+  padding-top:clamp(40px,6vw,64px);border-top:1px solid var(--line);
   opacity:0;transform:translateY(28px);
   transition:opacity .8s var(--ease),transform .8s var(--ease);
 }
+.project:first-child{padding-top:0;border-top:none;}
 .project.is-visible{opacity:1;transform:none;}
-.project__name{font-family:var(--font-display);margin:0;font-size:clamp(30px,3.8vw,42px);line-height:1.08;letter-spacing:.01em;}
+.project__name{font-family:var(--font-display);margin:0;font-size:clamp(26px,2.8vw,32px);line-height:1.1;letter-spacing:.01em;}
 .project__summary{margin:10px 0 0;font-size:clamp(16px,1.5vw,17.5px);line-height:1.5;max-width:50ch;}
 .project__credit{margin:6px 0 0;font-size:13px;color:var(--muted);}
 .site ul.bullets{display:flex;flex-direction:column;gap:12px;margin:20px 0 0;max-width:64ch;}
 .bullets li{
   position:relative;padding-left:20px;
   color:var(--muted);font-size:15.5px;line-height:1.66;
+}
+.hl{
+  color:color-mix(in srgb,var(--accent-fill) 75%,var(--text));
+  background:color-mix(in srgb,var(--accent-fill) 11%,transparent);
+  padding:.05em .3em;margin:0 -.1em;border-radius:5px;
+  -webkit-box-decoration-break:clone;box-decoration-break:clone;
 }
 .bullets li::before{
   content:"";position:absolute;left:0;top:.72em;
@@ -1417,7 +1434,7 @@ html{
 .site .project__link--quiet{color:var(--muted);text-decoration-color:var(--line);}
 .site .project__link:hover{gap:10px;color:var(--accent-fill);}
 
-.project__demo{display:block;}
+.project__demo{display:block;position:sticky;top:calc(var(--nav-h) + 28px);}
 .window{
   border-radius:18px;overflow:hidden;background:var(--card);
   border:1px solid var(--line);
@@ -1493,34 +1510,35 @@ html{
 }
 
 /* ---------- TECH ---------- */
-.tech__hint{margin:0 0 clamp(32px,4vw,52px);font-size:15px;color:var(--muted);}
-.tech__rows{display:flex;flex-direction:column;gap:clamp(24px,3.4vw,38px);}
+.tech__hint{margin:0 0 clamp(28px,4vw,44px);font-size:15px;color:var(--muted);}
+.tech__rows{display:flex;flex-direction:column;}
 .tech__row{
-  display:grid;grid-template-columns:140px 1fr;gap:clamp(16px,3vw,36px);
-  align-items:center;padding-bottom:clamp(24px,3.4vw,38px);
-  border-bottom:1px solid var(--line);
+  display:grid;grid-template-columns:150px 1fr;gap:clamp(12px,3vw,32px);
+  align-items:start;padding:18px 0;
+  border-top:1px solid var(--line);
 }
-.tech__row:last-child{border-bottom:none;padding-bottom:0;}
-.tech__label{font-size:14px;color:var(--muted);letter-spacing:.04em;}
-.tech__badges{display:flex;flex-wrap:wrap;gap:clamp(14px,2.6vw,32px);}
+.tech__row:last-child{border-bottom:1px solid var(--line);}
+.tech__label{padding-top:9px;font-size:14px;color:var(--muted);letter-spacing:.02em;}
+.tech__badges{display:flex;flex-wrap:wrap;gap:8px 10px;}
 
-.badge{
-  display:flex;flex-direction:column;align-items:center;gap:10px;width:76px;
-  opacity:0;transform:translateY(22px);
-  transition:opacity .6s var(--ease),transform .6s var(--ease);
+.chip{
+  display:inline-flex;align-items:center;gap:9px;min-height:40px;
+  padding:6px 15px 6px 7px;border-radius:999px;
+  background:var(--surface);border:1px solid var(--line);color:var(--text);
+  font:inherit;font-size:13.5px;line-height:1.2;cursor:pointer;
+  opacity:0;transform:translateY(12px);
+  transition:opacity .5s var(--ease),transform .5s var(--ease),border-color .2s var(--ease),background .2s var(--ease);
 }
-.tech.is-visible .badge{opacity:1;transform:none;}
-.badge__disc{
-  width:60px;height:60px;border-radius:50%;
-  background:#fff;display:grid;place-items:center;
-  box-shadow:0 10px 26px -12px rgba(47,43,34,.4);
-  transition:transform .3s var(--ease),box-shadow .3s var(--ease);
-  border:none;padding:0;font:inherit;cursor:pointer;
+.tech.is-visible .chip{opacity:1;transform:none;}
+.tech.is-visible .chip:hover{transform:translateY(-2px);border-color:var(--accent-fill);}
+.chip[aria-expanded="true"]{border-color:var(--accent-fill);background:color-mix(in srgb,var(--accent-fill) 10%,var(--surface));}
+.chip__icon{
+  flex:0 0 auto;width:26px;height:26px;border-radius:50%;
+  display:grid;place-items:center;background:#fff;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.06);
 }
-.badge:hover .badge__disc{transform:translateY(-5px) scale(1.05);box-shadow:0 16px 30px -12px rgba(47,43,34,.45);}
-.badge__disc img{width:34px;height:34px;}
-.badge__fallback{font-family:var(--font-display);font-size:24px;color:var(--ink-on-light);}
-.badge__name{font-size:12.5px;color:var(--muted);text-align:center;line-height:1.25;}
+.chip__icon img{width:16px;height:16px;display:block;}
+.chip__fallback{font-family:var(--font-display);font-size:13px;line-height:1;color:#800020;}
 
 /* ---------- SKILL BUBBLE ---------- */
 .skill-bubble{
@@ -1685,17 +1703,23 @@ html{
 /* ---------- RESPONSIVE ---------- */
 @media (max-width:860px){
   .project{grid-template-columns:minmax(0,1fr);gap:24px;}
-  .project__demo{order:-1;}
+  .project__demo{order:-1;position:static;}
 }
 @media (max-width:760px){
   .hero{flex-direction:column;align-items:flex-start;}
   .hero__intro{flex:none;width:100%;}
-  .tech__row{grid-template-columns:1fr;gap:14px;}
-  .tech__badges{gap:14px 10px;}
-  .badge{width:72px;}
-  .badge__disc{width:54px;height:54px;}
-  .badge__disc img{width:30px;height:30px;}
+  .tech__row{grid-template-columns:1fr;gap:10px;padding:16px 0;}
+  .tech__label{padding-top:0;}
+  .chip{min-height:38px;font-size:13px;}
   .footer{flex-direction:column;}
+  .dock{right:14px;bottom:14px;}
+  .dock__tab{width:50px;height:50px;min-height:0;padding:0;justify-content:center;}
+  .dock__tab-label{
+    position:absolute;width:1px;height:1px;margin:-1px;padding:0;
+    overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;
+  }
+  .dock__eq{height:16px;gap:3px;}
+  .dock__eq i{width:4px;}
 }
 @media (max-width:420px){
   .nav__links{gap:14px;}
@@ -1705,8 +1729,8 @@ html{
 /* ---------- REDUCED MOTION ---------- */
 @media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto;}
-  .project,.badge{opacity:1 !important;transform:none !important;transition:none !important;}
-  .window,.social,.badge__disc,.nav__links a::after,.site .project__link,.theme-toggle,.btn-primary,.window__mode{transition:none !important;}
+  .project,.chip{opacity:1 !important;transform:none !important;transition:none !important;}
+  .window,.social,.nav__links a::after,.site .project__link,.theme-toggle,.btn-primary,.window__mode{transition:none !important;}
   .window__screenshot{transform:none !important;transition:none !important;animation:none !important;}
   .skill-bubble,.theme-menu,.bg-dots,.dock__eq i,.footer__pulse::after,.typed__caret::after{animation:none !important;}
   .typed__caret{display:none;}
