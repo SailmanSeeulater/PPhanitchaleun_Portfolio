@@ -37,8 +37,20 @@ jobs:
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
         run: |
           install -m 700 -d ~/.ssh
-          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          # Browser-pasted secrets can arrive with CRLF endings, flattened lines, or stray spaces, which
+          # OpenSSH rejects ("error in libcrypto"). Rebuild a canonical PEM from header, body, and footer.
+          KEY=$(printf '%s' "$VPS_SSH_KEY" | tr -d '\r')
+          HEADER=$(printf '%s' "$KEY" | grep -o -- '-----BEGIN [A-Z ]*-----' | head -1)
+          FOOTER=$(printf '%s' "$KEY" | grep -o -- '-----END [A-Z ]*-----' | head -1)
+          BODY=${KEY#*"$HEADER"}
+          BODY=${BODY%"$FOOTER"*}
+          { echo "$HEADER"; printf '%s' "$BODY" | tr -d ' \t\n' | fold -w 64; echo; echo "$FOOTER"; } | sed '/^$/d' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+          if ! ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null; then
+            echo "::error::VPS_SSH_KEY is not a valid private key. Paste the full .key file, including the BEGIN and END lines."
+            exit 1
+          fi
+          echo "Using key: $(ssh-keygen -lf ~/.ssh/deploy_key)"
           printf '%s\n' "$VPS_HOST_KEY" > ~/.ssh/known_hosts
 
       - name: Sync build to the web root
