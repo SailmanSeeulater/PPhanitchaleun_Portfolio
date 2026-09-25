@@ -1020,7 +1020,7 @@ function useFlyingChips(active) {
     const bodies = chips.map((el) => ({
       el, w: el.offsetWidth || 90, h: el.offsetHeight || 40,
       x: null, y: null, vx: 0, vy: 0, r: rand(-12, 12), vr: rand(-40, 40),
-      hold: false, paused: false, moved: 0, px: 0, py: 0, pt: 0, tvx: 0, tvy: 0,
+      hold: false, paused: false, grounded: false, moved: 0, px: 0, py: 0, pt: 0, tvx: 0, tvy: 0,
     }));
     const byEl = new Map(bodies.map((b) => [b.el, b]));
     const bodyOf = (e) => byEl.get(e.currentTarget);
@@ -1069,6 +1069,11 @@ function useFlyingChips(active) {
       b.el.addEventListener("click", onClickCapture, true);
     }
 
+    // The project preview windows and the contact box are solid: balls bounce off them and can rest on top.
+    const OBSTACLES = ".window, .contact";
+    const obstacles = [...document.querySelectorAll(OBSTACLES)];
+    const BOUNCE = 0.38, FRICTION = 0.12;
+
     let last = performance.now(), raf, lastW = window.innerWidth, lastH = window.innerHeight, lastBeat = 0;
     const tick = (now) => {
       const dt = Math.min((now - last) / 1000, 0.05);
@@ -1081,6 +1086,7 @@ function useFlyingChips(active) {
       const beat = parseFloat(document.documentElement.style.getPropertyValue("--beat")) || 0;
       const kick = beat > 0.35 && lastBeat <= 0.35;
       lastBeat = beat;
+      const rects = obstacles.map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < H);
 
       for (const b of bodies) {
         if (b.x === null) {
@@ -1088,48 +1094,83 @@ function useFlyingChips(active) {
           b.x = rand(0, Math.max(1, W - b.w)); b.y = rand(-H * 0.7, H * 0.25); b.vx = rand(-70, 70);
         }
         if (b.hold || b.paused) continue;
-        const floor = H - b.h;
         if (kick) {
-          const resting = b.y >= floor - 2;
-          b.vy -= (resting ? 1 : 0.45) * (420 + beat * 640) * rand(0.6, 1.25);
+          b.vy -= (b.grounded ? 1 : 0.45) * (420 + beat * 640) * rand(0.6, 1.25);
           b.vx += rand(-170, 170) * beat;
           b.vr += rand(-140, 140) * beat;
         }
+        b.grounded = false;
         b.vy += GRAVITY * dt;
         b.x += b.vx * dt; b.y += b.vy * dt; b.r += b.vr * dt;
+
+        // circle vs the page's boxes
+        const rad = b.w / 2;
+        let cx = b.x + rad, cy = b.y + rad;
+        for (const R of rects) {
+          const nx0 = Math.max(R.left, Math.min(cx, R.right)), ny0 = Math.max(R.top, Math.min(cy, R.bottom));
+          let dx = cx - nx0, dy = cy - ny0;
+          const d2 = dx * dx + dy * dy;
+          if (d2 >= rad * rad) continue;
+          let nx, ny, push;
+          if (d2 > 0.0001) {
+            const d = Math.sqrt(d2);
+            nx = dx / d; ny = dy / d; push = rad - d;
+          } else {
+            // centre is inside the box: leave through the nearest face
+            const toL = cx - R.left, toR = R.right - cx, toT = cy - R.top, toB = R.bottom - cy;
+            const m = Math.min(toL, toR, toT, toB);
+            if (m === toT) { nx = 0; ny = -1; push = toT + rad; }
+            else if (m === toB) { nx = 0; ny = 1; push = toB + rad; }
+            else if (m === toL) { nx = -1; ny = 0; push = toL + rad; }
+            else { nx = 1; ny = 0; push = toR + rad; }
+          }
+          cx += nx * push; cy += ny * push;
+          const vn = b.vx * nx + b.vy * ny;
+          if (vn < 0) { b.vx -= (1 + BOUNCE) * vn * nx; b.vy -= (1 + BOUNCE) * vn * ny; }
+          if (ny < -0.7) {
+            // sitting on top of a box
+            b.grounded = true;
+            if (Math.abs(b.vy) < 60) b.vy = 0;
+            b.vx *= Math.pow(FRICTION, dt);
+            b.vr *= Math.pow(0.08, dt);
+            b.r += -b.r * Math.min(1, 5 * dt);
+          }
+        }
+        b.x = cx - rad; b.y = cy - rad;
+
+        const floor = H - b.h;
         if (b.x < 0) { b.x = 0; b.vx = Math.abs(b.vx) * WALL_BOUNCE; }
         if (b.x > W - b.w) { b.x = W - b.w; b.vx = -Math.abs(b.vx) * WALL_BOUNCE; }
         if (b.y > floor) {
           b.y = floor;
+          b.grounded = true;
           b.vy = b.vy > 60 ? -b.vy * FLOOR_BOUNCE : 0;
-          b.vx *= Math.pow(0.12, dt);
+          b.vx *= Math.pow(FRICTION, dt);
           b.vr *= Math.pow(0.08, dt);
           b.r += -b.r * Math.min(1, 5 * dt);
         }
         if (b.y < -H) { b.y = -H; b.vy = 0; }
       }
 
-      // let chips pile instead of sharing a pixel: push overlapping boxes apart
+      // balls push each other apart so they pile instead of sharing a pixel
       for (let pass = 0; pass < 3; pass++) {
         for (let i = 0; i < bodies.length; i++) {
           const a = bodies[i];
           if (a.hold || a.paused) continue;
+          const ra = a.w / 2;
           for (let j = i + 1; j < bodies.length; j++) {
             const c = bodies[j];
             if (c.hold || c.paused) continue;
-            const ox = Math.min(a.x + a.w, c.x + c.w) - Math.max(a.x, c.x);
-            const oy = Math.min(a.y + a.h, c.y + c.h) - Math.max(a.y, c.y);
-            if (ox <= 0 || oy <= 0) continue;
-            if (ox < oy) {
-              const dir = a.x < c.x ? -1 : 1;
-              a.x += dir * ox / 2; c.x -= dir * ox / 2;
-              const t = a.vx; a.vx = c.vx * 0.5; c.vx = t * 0.5;
-            } else {
-              const upper = a.y < c.y ? a : c, lower = upper === a ? c : a;
-              upper.y -= oy / 2; lower.y += oy / 2;
-              if (upper.vy > 0) upper.vy = -upper.vy * 0.25;
-              if (lower.vy < 0) lower.vy = 0;
-            }
+            const rc = c.w / 2;
+            const dx = (c.x + rc) - (a.x + ra), dy = (c.y + rc) - (a.y + ra);
+            const d2 = dx * dx + dy * dy, min = ra + rc;
+            if (d2 >= min * min || d2 === 0) continue;
+            const d = Math.sqrt(d2), nx = dx / d, ny = dy / d, overlap = (min - d) / 2;
+            a.x -= nx * overlap; a.y -= ny * overlap; c.x += nx * overlap; c.y += ny * overlap;
+            const rel = (c.vx - a.vx) * nx + (c.vy - a.vy) * ny;
+            if (rel < 0) { const jn = -(1 + 0.3) * rel / 2; a.vx -= jn * nx; a.vy -= jn * ny; c.vx += jn * nx; c.vy += jn * ny; }
+            if (ny > 0.7) a.grounded = true;
+            if (ny < -0.7) c.grounded = true;
           }
         }
       }
