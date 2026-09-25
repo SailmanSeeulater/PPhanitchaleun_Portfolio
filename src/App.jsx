@@ -6,6 +6,7 @@ import pdfyierShot from "./assets/screenshots/pdfyier-full.webp";
 import profilePhoto from "./assets/profile.webp";
 import WebAudioAnalyser from "web-audio-analyser";
 import { TRACKS } from "./tracks";
+import { LAYOUTS, LAYOUT_CSS } from "./layouts";
 
 /* =========================================================================
    Perfect Phanitchaleun: personal portfolio.
@@ -208,7 +209,7 @@ function TypedName() {
       return (
         <Fragment key={index}>
           {index === 0 && count === 0 && <span className="typed__caret" />}
-          <span className={index < count ? "typed__ch is-on" : "typed__ch"}>{ch}</span>
+          <span className={index < count ? "typed__ch is-on" : "typed__ch"} style={{ "--i": index }}>{ch}</span>
           {index === count - 1 && <span className="typed__caret" />}
         </Fragment>
       );
@@ -251,7 +252,7 @@ function TechBadge({ name, slug, delay, active, onSelect }) {
           />
         )}
       </span>
-      {name}
+      <span className="chip__name">{name}</span>
     </button>
   );
 }
@@ -620,7 +621,7 @@ function SoundDock() {
 
   useEffect(() => {
     if (!live || prefersReducedMotion()) return;
-    const fx = document.querySelector(".bg-fx");
+    const fx = document.documentElement;
     const eq = eqRef.current;
     const level = { beat: 0, b1: 0, b2: 0, b3: 0 };
     const avg = { bass: 0, b1: 0, b2: 0, b3: 0 };
@@ -924,6 +925,349 @@ function ThemePicker() {
   );
 }
 
+function useLayout() {
+  const [id, setId] = useState(() => {
+    const valid = (v) => (LAYOUTS.some((l) => l.id === v) ? v : null);
+    try {
+      return valid(new URLSearchParams(window.location.search).get("layout")) || valid(localStorage.getItem("layout")) || "original";
+    } catch {
+      return "original";
+    }
+  });
+
+  useLayoutEffect(() => {
+    document.documentElement.dataset.layout = id;
+    try {
+      localStorage.setItem("layout", id);
+    } catch {
+      /* storage unavailable */
+    }
+  }, [id]);
+
+  const select = (next) => {
+    if (next === id) return;
+    const apply = () => flushSync(() => setId(next));
+    if (!document.startViewTransition || prefersReducedMotion()) apply();
+    else document.startViewTransition(apply).ready.catch(() => {});
+  };
+
+  return [id, select];
+}
+
+/* ---- Chaos layout: every section re-rolls its fonts on its own 7 to 20 second timer ---- */
+// [family, fallback, width scale for huge headings, readable enough for body text]
+const CHAOS_FONTS = [
+  ["Bangers", "Impact, sans-serif", 1.08, false],
+  ["Bungee", "Impact, sans-serif", 0.82, false],
+  ["Creepster", "fantasy", 1.02, false],
+  ["Fredoka", "system-ui, sans-serif", 0.98, true],
+  ["Monoton", "fantasy", 0.86, false],
+  ["Pacifico", "cursive", 0.92, false],
+  ["Patrick Hand", "cursive", 1.04, true],
+  ["Permanent Marker", "cursive", 0.94, false],
+  ["Press Start 2P", "monospace", 0.6, false],
+  ["Rubik Mono One", "monospace", 0.74, false],
+];
+const CHAOS_BODY_FONTS = CHAOS_FONTS.filter((f) => f[3]).concat([["RX100", "monospace", 1, true], ["Inter", "sans-serif", 1, true]]);
+const CHAOS_SECTIONS = [".nav", ".hero", "#projects", "#tech", "#contact", ".footer"];
+
+function useFontRoulette(active) {
+  useEffect(() => {
+    if (!active || prefersReducedMotion()) return;
+    const pick = (pool, current) => {
+      let f;
+      do f = pool[Math.floor(Math.random() * pool.length)]; while (pool.length > 1 && f[0] === current);
+      return f;
+    };
+    const timers = [];
+    const els = CHAOS_SECTIONS.map((sel) => document.querySelector(sel)).filter(Boolean);
+    const roll = (el, state, first) => {
+      const display = pick(CHAOS_FONTS, state.display);
+      const body = pick(CHAOS_BODY_FONTS, state.body);
+      state.display = display[0]; state.body = body[0];
+      el.style.setProperty("--font-display", `'${display[0]}', ${display[1]}`);
+      el.style.setProperty("--font-body", `'${body[0]}', ${body[1]}`);
+      el.style.setProperty("--font-scale", String(display[2]));
+      if (!first) {
+        el.classList.remove("font-swap");
+        void el.offsetWidth;
+        el.classList.add("font-swap");
+      }
+      timers.push(setTimeout(() => roll(el, state, false), 7000 + Math.random() * 13000));
+    };
+    for (const el of els) roll(el, {}, true);
+    return () => {
+      timers.forEach(clearTimeout);
+      for (const el of els) {
+        el.style.removeProperty("--font-display");
+        el.style.removeProperty("--font-body");
+        el.style.removeProperty("--font-scale");
+        el.classList.remove("font-swap");
+      }
+    };
+  }, [active]);
+}
+
+/* ---- Chaos layout: the tech chips fall out of the page, pile up, and jump on the beat ---- */
+function useFlyingChips(active) {
+  useEffect(() => {
+    if (!active || prefersReducedMotion() || window.matchMedia("(max-width: 760px)").matches) return;
+    const chips = [...document.querySelectorAll(".tech .chip")];
+    if (!chips.length) return;
+    const rand = (a, b) => a + Math.random() * (b - a);
+    const GRAVITY = 1500, FLOOR_BOUNCE = 0.42, WALL_BOUNCE = 0.55;
+    for (const el of chips) el.classList.add("is-flying");
+    const bodies = chips.map((el) => ({
+      el, w: el.offsetWidth || 90, h: el.offsetHeight || 40,
+      x: null, y: null, vx: 0, vy: 0, r: rand(-12, 12), vr: rand(-40, 40),
+      hold: false, paused: false, moved: 0, px: 0, py: 0, pt: 0, tvx: 0, tvy: 0,
+    }));
+    const byEl = new Map(bodies.map((b) => [b.el, b]));
+    const bodyOf = (e) => byEl.get(e.currentTarget);
+
+    const onEnter = (e) => { bodyOf(e).paused = true; };
+    const onLeave = (e) => { const b = bodyOf(e); if (!b.hold) b.paused = false; };
+    const onFocus = (e) => { bodyOf(e).paused = true; };
+    const onBlur = (e) => { const b = bodyOf(e); if (!b.el.matches(":hover")) b.paused = false; };
+    const onDown = (e) => {
+      const b = bodyOf(e);
+      b.hold = true; b.moved = 0; b.px = e.clientX; b.py = e.clientY; b.pt = e.timeStamp; b.tvx = 0; b.tvy = 0;
+      try { b.el.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
+    };
+    const onMove = (e) => {
+      const b = bodyOf(e);
+      if (!b.hold) return;
+      const dx = e.clientX - b.px, dy = e.clientY - b.py, dt = Math.max(1, e.timeStamp - b.pt) / 1000;
+      b.x += dx; b.y += dy; b.moved += Math.hypot(dx, dy);
+      b.tvx = dx / dt; b.tvy = dy / dt;
+      b.px = e.clientX; b.py = e.clientY; b.pt = e.timeStamp;
+    };
+    const onUp = (e) => {
+      const b = bodyOf(e);
+      if (!b.hold) return;
+      b.hold = false;
+      const cap = 1100;
+      b.vx = Math.max(-cap, Math.min(cap, b.tvx));
+      b.vy = Math.max(-cap, Math.min(cap, b.tvy));
+      b.vr = Math.max(-160, Math.min(160, b.vx * 0.12));
+      b.paused = b.el.matches(":hover");
+    };
+    const onClickCapture = (e) => {
+      // a throw ends with a click; swallow it so the bubble stays closed
+      if (bodyOf(e).moved > 6) { e.stopPropagation(); e.preventDefault(); }
+    };
+
+    for (const b of bodies) {
+      b.el.addEventListener("pointerenter", onEnter);
+      b.el.addEventListener("pointerleave", onLeave);
+      b.el.addEventListener("focus", onFocus);
+      b.el.addEventListener("blur", onBlur);
+      b.el.addEventListener("pointerdown", onDown);
+      b.el.addEventListener("pointermove", onMove);
+      b.el.addEventListener("pointerup", onUp);
+      b.el.addEventListener("pointercancel", onUp);
+      b.el.addEventListener("click", onClickCapture, true);
+    }
+
+    let last = performance.now(), raf, lastW = window.innerWidth, lastH = window.innerHeight, lastBeat = 0;
+    const tick = (now) => {
+      const dt = Math.min((now - last) / 1000, 0.05);
+      last = now;
+      const W = window.innerWidth, H = window.innerHeight;
+      if (W !== lastW || H !== lastH) {
+        for (const b of bodies) if (b.x !== null) { b.x *= W / lastW; b.y *= H / lastH; }
+        lastW = W; lastH = H;
+      }
+      const beat = parseFloat(document.documentElement.style.getPropertyValue("--beat")) || 0;
+      const kick = beat > 0.35 && lastBeat <= 0.35;
+      lastBeat = beat;
+
+      for (const b of bodies) {
+        if (b.x === null) {
+          // rain in from above on the first frame
+          b.x = rand(0, Math.max(1, W - b.w)); b.y = rand(-H * 0.7, H * 0.25); b.vx = rand(-70, 70);
+        }
+        if (b.hold || b.paused) continue;
+        const floor = H - b.h;
+        if (kick) {
+          const resting = b.y >= floor - 2;
+          b.vy -= (resting ? 1 : 0.45) * (420 + beat * 640) * rand(0.6, 1.25);
+          b.vx += rand(-170, 170) * beat;
+          b.vr += rand(-140, 140) * beat;
+        }
+        b.vy += GRAVITY * dt;
+        b.x += b.vx * dt; b.y += b.vy * dt; b.r += b.vr * dt;
+        if (b.x < 0) { b.x = 0; b.vx = Math.abs(b.vx) * WALL_BOUNCE; }
+        if (b.x > W - b.w) { b.x = W - b.w; b.vx = -Math.abs(b.vx) * WALL_BOUNCE; }
+        if (b.y > floor) {
+          b.y = floor;
+          b.vy = b.vy > 60 ? -b.vy * FLOOR_BOUNCE : 0;
+          b.vx *= Math.pow(0.12, dt);
+          b.vr *= Math.pow(0.08, dt);
+          b.r += -b.r * Math.min(1, 5 * dt);
+        }
+        if (b.y < -H) { b.y = -H; b.vy = 0; }
+      }
+
+      // let chips pile instead of sharing a pixel: push overlapping boxes apart
+      for (let pass = 0; pass < 3; pass++) {
+        for (let i = 0; i < bodies.length; i++) {
+          const a = bodies[i];
+          if (a.hold || a.paused) continue;
+          for (let j = i + 1; j < bodies.length; j++) {
+            const c = bodies[j];
+            if (c.hold || c.paused) continue;
+            const ox = Math.min(a.x + a.w, c.x + c.w) - Math.max(a.x, c.x);
+            const oy = Math.min(a.y + a.h, c.y + c.h) - Math.max(a.y, c.y);
+            if (ox <= 0 || oy <= 0) continue;
+            if (ox < oy) {
+              const dir = a.x < c.x ? -1 : 1;
+              a.x += dir * ox / 2; c.x -= dir * ox / 2;
+              const t = a.vx; a.vx = c.vx * 0.5; c.vx = t * 0.5;
+            } else {
+              const upper = a.y < c.y ? a : c, lower = upper === a ? c : a;
+              upper.y -= oy / 2; lower.y += oy / 2;
+              if (upper.vy > 0) upper.vy = -upper.vy * 0.25;
+              if (lower.vy < 0) lower.vy = 0;
+            }
+          }
+        }
+      }
+      for (const b of bodies) {
+        b.x = Math.max(0, Math.min(W - b.w, b.x));
+        b.y = Math.min(H - b.h, b.y);
+        b.el.style.transform = `translate(${b.x.toFixed(1)}px,${b.y.toFixed(1)}px) rotate(${b.r.toFixed(1)}deg)`;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      for (const b of bodies) {
+        b.el.classList.remove("is-flying");
+        b.el.style.transform = "";
+        b.el.removeEventListener("pointerenter", onEnter);
+        b.el.removeEventListener("pointerleave", onLeave);
+        b.el.removeEventListener("focus", onFocus);
+        b.el.removeEventListener("blur", onBlur);
+        b.el.removeEventListener("pointerdown", onDown);
+        b.el.removeEventListener("pointermove", onMove);
+        b.el.removeEventListener("pointerup", onUp);
+        b.el.removeEventListener("pointercancel", onUp);
+        b.el.removeEventListener("click", onClickCapture, true);
+      }
+    };
+  }, [active]);
+}
+
+function LayoutThumb({ id }) {
+  const common = { width: 44, height: 30, viewBox: "0 0 44 30", "aria-hidden": true };
+  if (id === "chaos")
+    return (
+      <svg {...common} fill="currentColor">
+        <rect x="4" y="5" width="16" height="7" rx="3.5" transform="rotate(-14 12 8.5)" />
+        <rect x="24" y="3" width="14" height="7" rx="3.5" transform="rotate(11 31 6.5)" opacity=".7" />
+        <rect x="3" y="18" width="12" height="7" rx="3.5" transform="rotate(19 9 21.5)" opacity=".55" />
+        <rect x="19" y="15" width="20" height="7" rx="3.5" transform="rotate(-7 29 18.5)" />
+        <rect x="27" y="23" width="12" height="6" rx="3" transform="rotate(16 33 26)" opacity=".4" />
+      </svg>
+    );
+  if (id === "brutalist")
+    return (
+      <svg {...common} fill="currentColor">
+        <rect x="2" y="2" width="40" height="7" />
+        <rect x="2" y="12" width="16" height="16" opacity=".85" />
+        <rect x="21" y="12" width="21" height="3" />
+        <rect x="21" y="18" width="21" height="3" opacity=".6" />
+        <rect x="21" y="24" width="13" height="4" opacity=".35" />
+      </svg>
+    );
+  if (id === "terminal")
+    return (
+      <svg {...common} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 9l5 4-5 4" />
+        <path d="M14 18h8" />
+        <path d="M6 24h24" opacity=".35" />
+      </svg>
+    );
+  return (
+    <svg {...common} fill="currentColor">
+      <circle cx="10" cy="12" r="6" opacity=".55" />
+      <rect x="20" y="6" width="20" height="5" rx="2" />
+      <rect x="20" y="14" width="15" height="2" rx="1" opacity=".5" />
+      <rect x="20" y="19" width="10" height="4" rx="2" opacity=".8" />
+      <rect x="2" y="26" width="40" height="2" rx="1" opacity=".25" />
+    </svg>
+  );
+}
+
+function LayoutDock({ current, select }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+  const tabRef = useRef(null);
+  const menuRef = useRef(null);
+  const layout = LAYOUTS.find((l) => l.id === current);
+
+  useEffect(() => {
+    if (!open) return;
+    menuRef.current?.querySelector('[aria-pressed="true"]')?.focus({ preventScroll: true });
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        tabRef.current?.focus();
+      }
+    };
+    const onOutside = (e) => {
+      if (!rootRef.current?.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onOutside);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onOutside);
+    };
+  }, [open]);
+
+  return (
+    <div className="ldock" ref={rootRef}>
+      {open && (
+        <div className="ldock__menu" id="layout-menu" ref={menuRef} role="group" aria-label="Page layouts">
+          <p className="ldock__hint">Same content, five ways to read it.</p>
+          {LAYOUTS.map((l) => (
+            <button key={l.id} type="button" className="ldock__opt" aria-pressed={l.id === current} onClick={() => select(l.id)}>
+              <span className="ldock__thumb">
+                <LayoutThumb id={l.id} />
+              </span>
+              <span>
+                <span className="ldock__name">{l.name}</span>
+                <span className="ldock__blurb">{l.blurb}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+      <button
+        ref={tabRef}
+        type="button"
+        className="ldock__tab"
+        aria-expanded={open}
+        aria-controls="layout-menu"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3.5" y="3.5" width="7" height="17" rx="1.5" />
+          <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
+          <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
+        </svg>
+        <span className="ldock__label">
+          Layout <span className="ldock__current">· {layout.name}</span>
+        </span>
+      </button>
+    </div>
+  );
+}
+
 const DownloadIcon = () => (
   <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
     <path d="M12 4v11m0 0 4.5-4.5M12 15l-4.5-4.5M5 19h14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -934,7 +1278,10 @@ export default function App() {
   const [techRef, techInView] = useInView({ threshold: 0.1 });
   const [activeSkill, setActiveSkill] = useState(null);
   const skillTriggerRef = useRef(null);
+  const [layoutId, selectLayout] = useLayout();
   useAnalytics();
+  useFlyingChips(layoutId === "chaos");
+  useFontRoulette(layoutId === "chaos");
 
   const handleSelectSkill = (name, trigger) => {
     skillTriggerRef.current = trigger;
@@ -955,7 +1302,7 @@ export default function App() {
 
   return (
     <div className="site">
-      <style>{CSS}</style>
+      <style>{CSS + LAYOUT_CSS}</style>
       <div className="bg-fx" aria-hidden="true">
         <div className="bg-dots" />
       </div>
@@ -1070,6 +1417,7 @@ export default function App() {
 
       <SkillBubble skill={activeSkill} onClose={closeSkill} />
       <SoundDock />
+      <LayoutDock current={layoutId} select={selectLayout} />
     </div>
   );
 }
@@ -1081,7 +1429,8 @@ const CSS = `
 :root{
   --bg:#f3e6d5;
   --surface:#fff9f2;
-  --accent-fill:#800020;
+  --brand:#800020;
+  --accent-fill:var(--brand);
   --text:#4a0014;
   --accent:#4a0014;
   --muted:color-mix(in srgb,var(--text) 78%,var(--bg));
@@ -1105,94 +1454,94 @@ const CSS = `
 }
 :root[data-theme="ocean"]{
   --bg:#fdf1b8;--surface:#fffbe3;--card:#fffbe3;--placeholder:#fdf1b8;
-  --accent-fill:#1d4ed8;--card-ink:#1d4ed8;--ink-on-light:#1d4ed8;--shadow:#1d4ed8;
+  --brand:#1d4ed8;--card-ink:#1d4ed8;--ink-on-light:#1d4ed8;--shadow:#1d4ed8;
   --text:#0a1f5c;--accent:#0a1f5c;
   --line:rgba(29,78,216,.2);--tagline:#5b6275;
 }
 :root[data-theme="forest"]{
   --bg:#ffffff;--surface:#eef6f0;--card:#eef6f0;--placeholder:#eef6f0;
-  --accent-fill:#1b7a43;--card-ink:#1b7a43;--ink-on-light:#1b7a43;--shadow:#1b7a43;
+  --brand:#1b7a43;--card-ink:#1b7a43;--ink-on-light:#1b7a43;--shadow:#1b7a43;
   --text:#0c3b22;--accent:#0c3b22;
   --line:rgba(27,122,67,.2);--tagline:#5f6b63;
 }
 :root[data-theme="midnight"]{
   color-scheme:dark;
   --bg:#0f0f0f;--surface:#1a1a1a;--card:#1a1a1a;--placeholder:#1a1a1a;
-  --accent-fill:#c6f432;--card-ink:#c6f432;--on-accent:#0f0f0f;--ink-on-light:#0f0f0f;--shadow:#000;
+  --brand:#c6f432;--card-ink:#c6f432;--on-accent:#0f0f0f;--ink-on-light:#0f0f0f;--shadow:#000;
   --text:#f2f2ec;--accent:#c6f432;
   --line:rgba(198,244,50,.2);--tagline:#9a9a94;
   --grain-opacity:.07;--grain-blend:screen;
 }
 :root[data-theme="bubblegum"]{
   --bg:#ffd6e8;--surface:#ffe9f2;--card:#ffe9f2;--placeholder:#ffd6e8;
-  --accent-fill:#141414;--card-ink:#141414;--on-accent:#ffd6e8;--ink-on-light:#141414;--shadow:#d6336c;
+  --brand:#141414;--card-ink:#141414;--on-accent:#ffd6e8;--ink-on-light:#141414;--shadow:#d6336c;
   --text:#1a0a12;--accent:#1a0a12;
   --line:rgba(20,20,20,.16);--tagline:#6b4a58;
 }
 :root[data-theme="lavender"]{
   --bg:#ece6ff;--surface:#f7f4ff;--card:#f7f4ff;--placeholder:#ece6ff;
-  --accent-fill:#5b2bd1;--card-ink:#5b2bd1;--ink-on-light:#5b2bd1;--shadow:#5b2bd1;
+  --brand:#5b2bd1;--card-ink:#5b2bd1;--ink-on-light:#5b2bd1;--shadow:#5b2bd1;
   --text:#26104f;--accent:#26104f;
   --line:rgba(91,43,209,.2);--tagline:#6a6380;
 }
 :root[data-theme="harbor"]{
   color-scheme:dark;
   --bg:#0d1b2a;--surface:#15263a;--card:#15263a;--placeholder:#15263a;
-  --accent-fill:#ff8a3d;--card-ink:#ff8a3d;--on-accent:#0d1b2a;--ink-on-light:#0d1b2a;--shadow:#000;
+  --brand:#ff8a3d;--card-ink:#ff8a3d;--on-accent:#0d1b2a;--ink-on-light:#0d1b2a;--shadow:#000;
   --text:#f3efe6;--accent:#ff8a3d;
   --line:rgba(255,138,61,.22);--tagline:#9aa6b4;
   --grain-opacity:.07;--grain-blend:screen;
 }
 :root[data-theme="mint"]{
   --bg:#d9f2e4;--surface:#eefaf3;--card:#eefaf3;--placeholder:#d9f2e4;
-  --accent-fill:#5a3825;--card-ink:#5a3825;--ink-on-light:#5a3825;--shadow:#5a3825;
+  --brand:#5a3825;--card-ink:#5a3825;--ink-on-light:#5a3825;--shadow:#5a3825;
   --text:#3b2416;--accent:#3b2416;
   --line:rgba(90,56,37,.18);--tagline:#6b6258;
 }
 :root[data-theme="tangerine"]{
   --bg:#fff1e0;--surface:#fff8ef;--card:#fff8ef;--placeholder:#fff1e0;
-  --accent-fill:#c2410c;--card-ink:#c2410c;--ink-on-light:#c2410c;--shadow:#c2410c;
+  --brand:#c2410c;--card-ink:#c2410c;--ink-on-light:#c2410c;--shadow:#c2410c;
   --text:#431407;--accent:#431407;
   --line:rgba(194,65,12,.2);--tagline:#7a6150;
 }
 :root[data-theme="coral"]{
   --bg:#ffe1d6;--surface:#fff1eb;--card:#fff1eb;--placeholder:#ffe1d6;
-  --accent-fill:#0d6b64;--card-ink:#0d6b64;--ink-on-light:#0d6b64;--shadow:#0d6b64;
+  --brand:#0d6b64;--card-ink:#0d6b64;--ink-on-light:#0d6b64;--shadow:#0d6b64;
   --text:#0b3b37;--accent:#0b3b37;
   --line:rgba(15,118,110,.2);--tagline:#6d5d57;
 }
 :root[data-theme="synthwave"]{
   color-scheme:dark;
   --bg:#1a0b2e;--surface:#26123f;--card:#26123f;--placeholder:#26123f;
-  --accent-fill:#ff4fd8;--card-ink:#ff4fd8;--on-accent:#1a0b2e;--ink-on-light:#1a0b2e;--shadow:#000;
+  --brand:#ff4fd8;--card-ink:#ff4fd8;--on-accent:#1a0b2e;--ink-on-light:#1a0b2e;--shadow:#000;
   --text:#f5e9ff;--accent:#ff4fd8;
   --line:rgba(255,79,216,.22);--tagline:#a792c0;
   --grain-opacity:.07;--grain-blend:screen;
 }
 :root[data-theme="sky"]{
   --bg:#dff1ff;--surface:#f2f9ff;--card:#f2f9ff;--placeholder:#dff1ff;
-  --accent-fill:#0369a1;--card-ink:#0369a1;--ink-on-light:#0369a1;--shadow:#0369a1;
+  --brand:#0369a1;--card-ink:#0369a1;--ink-on-light:#0369a1;--shadow:#0369a1;
   --text:#062a45;--accent:#062a45;
   --line:rgba(3,105,161,.2);--tagline:#4f6475;
 }
 :root[data-theme="espresso"]{
   color-scheme:dark;
   --bg:#2b1d16;--surface:#3a2920;--card:#3a2920;--placeholder:#3a2920;
-  --accent-fill:#e8b98a;--card-ink:#e8b98a;--on-accent:#2b1d16;--ink-on-light:#2b1d16;--shadow:#000;
+  --brand:#e8b98a;--card-ink:#e8b98a;--on-accent:#2b1d16;--ink-on-light:#2b1d16;--shadow:#000;
   --text:#f5e8dc;--accent:#e8b98a;
   --line:rgba(232,185,138,.22);--tagline:#bda694;
   --grain-opacity:.07;--grain-blend:screen;
 }
 :root[data-theme="matcha"]{
   --bg:#eef0dc;--surface:#f8f9ee;--card:#f8f9ee;--placeholder:#eef0dc;
-  --accent-fill:#4d6b1f;--card-ink:#4d6b1f;--ink-on-light:#4d6b1f;--shadow:#4d6b1f;
+  --brand:#4d6b1f;--card-ink:#4d6b1f;--ink-on-light:#4d6b1f;--shadow:#4d6b1f;
   --text:#2a3a10;--accent:#2a3a10;
   --line:rgba(77,107,31,.2);--tagline:#5f6650;
 }
 :root[data-theme="grape"]{
   color-scheme:dark;
   --bg:#2a1245;--surface:#37195a;--card:#37195a;--placeholder:#37195a;
-  --accent-fill:#7af0c2;--card-ink:#7af0c2;--on-accent:#2a1245;--ink-on-light:#2a1245;--shadow:#000;
+  --brand:#7af0c2;--card-ink:#7af0c2;--on-accent:#2a1245;--ink-on-light:#2a1245;--shadow:#000;
   --text:#f2eaff;--accent:#7af0c2;
   --line:rgba(122,240,194,.22);--tagline:#b5a4cc;
   --grain-opacity:.07;--grain-blend:screen;
@@ -1200,41 +1549,41 @@ const CSS = `
 :root[data-theme="inferno"]{
   color-scheme:dark;
   --bg:#111111;--surface:#1c1c1c;--card:#1c1c1c;--placeholder:#1c1c1c;
-  --accent-fill:#ff3b3b;--card-ink:#ff5a5a;--on-accent:#111111;--ink-on-light:#111111;--shadow:#000;
+  --brand:#ff3b3b;--card-ink:#ff5a5a;--on-accent:#111111;--ink-on-light:#111111;--shadow:#000;
   --text:#f5f5f5;--accent:#ff5a5a;
   --line:rgba(255,59,59,.24);--tagline:#a3a3a3;
   --grain-opacity:.07;--grain-blend:screen;
 }
 :root[data-theme="gameboy"]{
   --bg:#c4cfa1;--surface:#d6dfb5;--card:#d6dfb5;--placeholder:#c4cfa1;
-  --accent-fill:#2f4d09;--card-ink:#2f4d09;--ink-on-light:#2f4d09;--shadow:#2f4d09;
+  --brand:#2f4d09;--card-ink:#2f4d09;--ink-on-light:#2f4d09;--shadow:#2f4d09;
   --text:#1f3a1f;--accent:#1f3a1f;
   --line:rgba(47,77,9,.24);--tagline:#3f4f30;
 }
 :root[data-theme="barbie"]{
   --bg:#ffe3f1;--surface:#fff0f7;--card:#fff0f7;--placeholder:#ffe3f1;
-  --accent-fill:#b80f6b;--card-ink:#b80f6b;--ink-on-light:#b80f6b;--shadow:#b80f6b;
+  --brand:#b80f6b;--card-ink:#b80f6b;--ink-on-light:#b80f6b;--shadow:#b80f6b;
   --text:#4a0930;--accent:#4a0930;
   --line:rgba(184,15,107,.2);--tagline:#7a5468;
 }
 :root[data-theme="terminal"]{
   color-scheme:dark;
   --bg:#050805;--surface:#0c140c;--card:#0c140c;--placeholder:#0c140c;
-  --accent-fill:#39ff6a;--card-ink:#39ff6a;--on-accent:#050805;--ink-on-light:#050805;--shadow:#000;
+  --brand:#39ff6a;--card-ink:#39ff6a;--on-accent:#050805;--ink-on-light:#050805;--shadow:#000;
   --text:#c9ffd5;--accent:#39ff6a;
   --line:rgba(57,255,106,.22);--tagline:#7fae8a;
   --grain-opacity:.08;--grain-blend:screen;
 }
 :root[data-theme="slate"]{
   --bg:#eef2f6;--surface:#f8fafc;--card:#f8fafc;--placeholder:#eef2f6;
-  --accent-fill:#334155;--card-ink:#334155;--ink-on-light:#334155;--shadow:#334155;
+  --brand:#334155;--card-ink:#334155;--ink-on-light:#334155;--shadow:#334155;
   --text:#0f172a;--accent:#0f172a;
   --line:rgba(51,65,85,.18);--tagline:#5b687a;
 }
 :root[data-theme="mustard"]{
   color-scheme:dark;
   --bg:#1f2124;--surface:#2a2d31;--card:#2a2d31;--placeholder:#2a2d31;
-  --accent-fill:#f2c230;--card-ink:#f2c230;--on-accent:#1f2124;--ink-on-light:#1f2124;--shadow:#000;
+  --brand:#f2c230;--card-ink:#f2c230;--on-accent:#1f2124;--ink-on-light:#1f2124;--shadow:#000;
   --text:#f1efe8;--accent:#f2c230;
   --line:rgba(242,194,48,.22);--tagline:#a9a69d;
   --grain-opacity:.07;--grain-blend:screen;

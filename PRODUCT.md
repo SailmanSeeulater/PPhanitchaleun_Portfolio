@@ -33,7 +33,7 @@ Perfect builds and runs their own production infrastructure, not just class assi
 
 - Stack: React 19 + Vite single-file app (`src/App.jsx`), plain injected CSS, no UI library.
 - Hosting: static build served by nginx from `/var/www/portfolio` on the Oracle VPS; every push to `main` deploys via `.github/workflows/deploy.yml` (needs the `VPS_SSH_KEY` repo secret).
-- Features in place: 11 selectable color themes (persisted), clickable tech badges that list which repos use a skill, a music player for Perfect's own tracks (12 SoundCloud releases self-hosted as 128 kbps MP3 in `public/music/`, listed in `src/tracks.js`; a Web Audio analyser drives the background dots and the player's equalizer bars), GoatCounter analytics with a public visitor count (site code `latesailor`).
+- Features in place: four switchable page layouts (Original, Swiss, Terminal, Chaos; `src/layouts.js`, persisted, `?layout=` URL override), 21 selectable color themes (persisted), clickable tech badges that list which repos use a skill, a music player for Perfect's own tracks (12 SoundCloud releases self-hosted as 128 kbps MP3 in `public/music/`, listed in `src/tracks.js`; a Web Audio analyser drives the background dots and the player's equalizer bars), GoatCounter analytics with a public visitor count (site code `latesailor`).
 - Undecided: school name and graduation date are not provided and must not be displayed until confirmed.
 
 ## Brand Commitments
