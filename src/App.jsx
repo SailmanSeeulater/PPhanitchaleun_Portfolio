@@ -1372,9 +1372,9 @@ export default function App() {
           </div>
           <div className="hero__intro">
             <TypedName />
-            <p className="hero__role">Backend, DevOps &amp; full-stack engineer</p>
+            <p className="hero__role">Full-Stack Engineer, pivoting to AI Engineer</p>
             <p className="hero__proof">
-              I like to build websites and do pottery.
+              I like to build things and dream about pottery.
             </p>
             <p className="hero__status">Student, open to SWE internships and new grad roles</p>
             <div className="hero__actions">
