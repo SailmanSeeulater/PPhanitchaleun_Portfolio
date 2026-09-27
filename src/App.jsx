@@ -3,6 +3,7 @@ import { flushSync } from "react-dom";
 import mordiShot from "./assets/screenshots/mordi-full.webp";
 import lonelyChessShot from "./assets/screenshots/lonely-chess-full.webp";
 import pdfyierShot from "./assets/screenshots/pdfyier-full.webp";
+import odinsKinShot from "./assets/screenshots/odins-kin-full.webp";
 import profilePhoto from "./assets/profile.webp";
 import WebAudioAnalyser from "web-audio-analyser";
 import { TRACKS } from "./tracks";
@@ -65,16 +66,28 @@ const PROJECTS = [
     repo: `${GITHUB}/pdfyier`,
     demo: { domain: "pdfyier.latesailor.dev", image: pdfyierShot, height: 625 },
   },
+  {
+    name: "Odin's Kin",
+    summary: "A Windows screen time tracker: a desktop app that records which app has focus, and a local dashboard that shows where the day went.",
+    bullets: [
+      "Tracked down why my history looked inflated: every stop re-saved all earlier events, **double counting about 3 hours** of real sessions, and a KeyError on stop lost sessions outright. Fixed both, wrote a repair script, and added 26 unit tests.",
+
+    ],
+    stack: ["Python", "Tkinter", "Pillow", "Flask", "SQLite", "pywin32", "JavaScript"],
+    skills: ["HTML5", "CSS3", "SQL", "PostgreSQL", "Git", "GitHub"],
+    repo: `${GITHUB}/odins_kin`,
+    // Runs locally, so there's no live site: the preview shows the dashboard on localhost
+    demo: { domain: "127.0.0.1:5000", image: odinsKinShot, height: 1472 },
+  },
 ];
 
 const OTHER_REPOS = [
   { name: "SHMA", href: `${GITHUB}/Gibbi-Backend`, skills: ["Kotlin", "Spring Boot", "Spring Security", "PostgreSQL", "SQL", "Docker", "Git", "GitHub"] },
-  { name: "Odins Kin", href: `${GITHUB}/odins_kin`, skills: ["Python", "Flask", "SQLite", "SQL", "HTML5", "Git", "GitHub"] },
   { name: "Fight Up The Hill", href: `${GITHUB}/CS-210-Final-Project`, skills: ["C++", "Git", "GitHub"] },
 ];
 
 const SKILL_SOURCES = [
-  ...PROJECTS.map((p) => ({ name: p.name, href: p.live, skills: [...p.stack, ...p.skills] })),
+  ...PROJECTS.map((p) => ({ name: p.name, href: p.live || p.repo, skills: [...p.stack, ...p.skills] })),
   ...OTHER_REPOS,
 ];
 
@@ -316,7 +329,7 @@ function ScrollPreview({ project }) {
         </div>
         <a
           className="window__view"
-          href={project.live}
+          href={project.live || project.repo}
           target="_blank"
           rel="noreferrer"
           tabIndex={-1}
@@ -374,10 +387,12 @@ function ProjectRow({ project, index }) {
         </ul>
 
         <div className="project__links">
-          <a className="project__link" href={project.live} target="_blank" rel="noreferrer">
-            Visit {project.demo.domain}
-            <ArrowIcon />
-          </a>
+          {project.live && (
+            <a className="project__link" href={project.live} target="_blank" rel="noreferrer">
+              Visit {project.demo.domain}
+              <ArrowIcon />
+            </a>
+          )}
           <a className="project__link project__link--quiet" href={project.repo} target="_blank" rel="noreferrer">
             Source on GitHub
             <ArrowIcon />
@@ -1202,6 +1217,70 @@ function useFlyingChips(active) {
   }, [active]);
 }
 
+/* ---- Sliding layout: prev/next controls for the horizontal project rail ---- */
+function RailControls({ railRef, count }) {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    const rail = railRef.current;
+    if (!rail) return;
+    const section = rail.parentElement;
+    const update = () => {
+      // line the first card up with the section title: pad = section content edge, measured
+      const sb = section.getBoundingClientRect();
+      const edge = sb.left + (parseFloat(getComputedStyle(section).paddingLeft) || 0);
+      if (edge > 0) rail.style.setProperty("--rail-pad", `${Math.round(edge)}px`);
+      const cards = rail.querySelectorAll(".project");
+      const pad = parseFloat(getComputedStyle(rail).paddingLeft) || 0;
+      const atEnd = rail.scrollLeft >= rail.scrollWidth - rail.clientWidth - 2;
+      let i = 0;
+      cards.forEach((c, k) => {
+        if (c.offsetLeft - pad <= rail.scrollLeft + 24) i = k;
+      });
+      setIndex(atEnd ? cards.length - 1 : i);
+    };
+    rail.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update); // also fires once on observe
+    ro.observe(rail);
+    return () => {
+      rail.removeEventListener("scroll", update);
+      ro.disconnect();
+      rail.style.removeProperty("--rail-pad");
+    };
+  }, [railRef]);
+
+  const go = (dir) => {
+    const rail = railRef.current;
+    if (!rail) return;
+    const cards = rail.querySelectorAll(".project");
+    const target = cards[Math.max(0, Math.min(cards.length - 1, index + dir))];
+    if (!target) return;
+    const pad = parseFloat(getComputedStyle(rail).paddingLeft) || 0;
+    rail.scrollTo({ left: target.offsetLeft - pad, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  };
+
+  const arrow = (flip) => (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={flip ? { transform: "scaleX(-1)" } : undefined}>
+      <path d="M5 12h14" />
+      <path d="M13 6l6 6-6 6" />
+    </svg>
+  );
+
+  return (
+    <div className="rail-nav" role="group" aria-label="Project navigation">
+      <button type="button" className="rail-nav__btn" onClick={() => go(-1)} disabled={index <= 0} aria-label="Previous project">
+        {arrow(true)}
+      </button>
+      <span className="rail-nav__count" aria-live="polite">
+        {index + 1} / {count}
+      </span>
+      <button type="button" className="rail-nav__btn" onClick={() => go(1)} disabled={index >= count - 1} aria-label="Next project">
+        {arrow(false)}
+      </button>
+    </div>
+  );
+}
+
 function LayoutThumb({ id }) {
   const common = { width: 44, height: 30, viewBox: "0 0 44 30", "aria-hidden": true };
   if (id === "chaos")
@@ -1212,6 +1291,14 @@ function LayoutThumb({ id }) {
         <rect x="3" y="18" width="12" height="7" rx="3.5" transform="rotate(19 9 21.5)" opacity=".55" />
         <rect x="19" y="15" width="20" height="7" rx="3.5" transform="rotate(-7 29 18.5)" />
         <rect x="27" y="23" width="12" height="6" rx="3" transform="rotate(16 33 26)" opacity=".4" />
+      </svg>
+    );
+  if (id === "sliding")
+    return (
+      <svg {...common} fill="currentColor">
+        <rect x="-9" y="5" width="12" height="20" rx="3" opacity=".3" />
+        <rect x="6" y="5" width="20" height="20" rx="3" />
+        <rect x="29" y="5" width="20" height="20" rx="3" opacity=".5" />
       </svg>
     );
   if (id === "brutalist")
@@ -1323,6 +1410,7 @@ export default function App() {
   useAnalytics();
   useFlyingChips(layoutId === "chaos");
   useFontRoulette(layoutId === "chaos");
+  const railRef = useRef(null);
 
   const handleSelectSkill = (name, trigger) => {
     skillTriggerRef.current = trigger;
@@ -1390,8 +1478,11 @@ export default function App() {
 
         {/* ---------- PROJECTS ---------- */}
         <section id="projects" className="section section--projects" aria-labelledby="projects-title">
-          <h2 id="projects-title" className="section__title">Projects</h2>
-          <div className="projects">
+          <div className="projects__head">
+            <h2 id="projects-title" className="section__title">Projects</h2>
+            {layoutId === "sliding" && <RailControls railRef={railRef} count={PROJECTS.length} />}
+          </div>
+          <div className="projects" ref={railRef}>
             {PROJECTS.map((p, i) => (
               <ProjectRow key={p.name} project={p} index={i} />
             ))}
@@ -1823,6 +1914,7 @@ html{
 .hero__resume-date{margin:12px 0 0;font-size:13.5px;color:var(--muted);}
 
 /* ---------- PROJECTS ---------- */
+.projects__head{display:contents;}
 .projects{display:flex;flex-direction:column;gap:clamp(56px,8vw,96px);}
 .project{
   display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);
