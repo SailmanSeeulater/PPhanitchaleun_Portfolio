@@ -33,7 +33,7 @@ Perfect builds and runs their own production infrastructure, not just class assi
 
 - Stack: React 19 + Vite single-file app (`src/App.jsx`), plain injected CSS, no UI library.
 - Hosting: static build served by nginx from `/var/www/portfolio` on the Oracle VPS; every push to `main` deploys via `.github/workflows/deploy.yml` (needs the `VPS_SSH_KEY` repo secret).
-- Features in place: four switchable page layouts (Original, Swiss, Terminal, Chaos; `src/layouts.js`, persisted, `?layout=` URL override), 21 selectable color themes (persisted), clickable tech badges that list which repos use a skill, a music player for Perfect's own tracks (12 SoundCloud releases self-hosted as 128 kbps MP3 in `public/music/`, listed in `src/tracks.js`; a Web Audio analyser drives the background dots and the player's equalizer bars), GoatCounter analytics with a public visitor count (site code `latesailor`).
+- Features in place: five switchable page layouts (Original, Swiss, Sliding, Terminal, Chaos; `src/layouts.js`, persisted, `?layout=` URL override), 21 selectable color themes (persisted), clickable tech badges that list which repos use a skill, a music player for Perfect's own tracks (12 SoundCloud releases self-hosted as 128 kbps MP3 in `public/music/`, listed in `src/tracks.js`; a Web Audio analyser drives the background dots and the player's equalizer bars), GoatCounter analytics with a public visitor count (site code `latesailor`).
 - Undecided: school name and graduation date are not provided and must not be displayed until confirmed.
 
 ## Brand Commitments
@@ -49,7 +49,8 @@ Perfect builds and runs their own production infrastructure, not just class assi
 - Mordi (mordi.latesailor.dev): Spring Boot REST API with JWT auth; found and rotated a plaintext JWT secret and DB password; closed an account enumeration hole; Redis rate limiting; GitHub Actions CI that caught 9 defects before deploy.
 - Lonely Chess (lonelychess.latesailor.dev): esoteric language where PGN chess games execute as code; Python interpreter plus TypeScript in-browser port; FizzBuzz as a 2,669 move game. CS 420 final project with Nicolaus ReyasBautista.
 - pdfyier (pdfyier.latesailor.dev): image-to-PDF tool, FastAPI + ImageMagick behind nginx, RAM-backed temp storage.
-- Other repos: SHMA / Gibbi-Backend (Kotlin, Spring Boot), Odins Kin (Python, Flask, SQLite), Fight Up The Hill (C++).
+- Odin's Kin (github.com/SailmanSeeulater/odins_kin, runs locally on Windows, not deployed): Tkinter + Pillow desktop tracker and a Flask dashboard styled after iOS Screen Time; fixed a bug that re-saved earlier sessions' events (about 3 hours double counted in real data) and a KeyError that lost sessions on stop; window titles dropped by default, YouTube links matched from browser history; closed an XSS hole where window titles rendered as HTML; save animation cut from ~30 ms to ~2 ms a frame (60 fps); 26 unit tests. Screenshots use synthetic demo data.
+- Other repos: SHMA / Gibbi-Backend (Kotlin, Spring Boot), Fight Up The Hill (C++).
 - Assets: headshot (`src/assets/profile.jpg`), project screenshots (`src/assets/screenshots/`), résumé PDF.
 - Absent, must not be fabricated: testimonials, employer names, internship history, metrics beyond those above, school and graduation date.
 
