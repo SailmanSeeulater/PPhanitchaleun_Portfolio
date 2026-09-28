@@ -4,6 +4,7 @@ import mordiShot from "./assets/screenshots/mordi-full.webp";
 import lonelyChessShot from "./assets/screenshots/lonely-chess-full.webp";
 import pdfyierShot from "./assets/screenshots/pdfyier-full.webp";
 import odinsKinShot from "./assets/screenshots/odins-kin-full.webp";
+import nextixShot from "./assets/screenshots/nextix-full.webp";
 import profilePhoto from "./assets/profile.webp";
 import WebAudioAnalyser from "web-audio-analyser";
 import { TRACKS } from "./tracks";
@@ -78,6 +79,20 @@ const PROJECTS = [
     repo: `${GITHUB}/odins_kin`,
     // Runs locally, so there's no live site: the preview shows the dashboard on localhost
     demo: { domain: "127.0.0.1:5000", image: odinsKinShot, height: 1472 },
+  },
+  {
+    name: "nexTix",
+    summary: "A ticket board for coding agents: describe a change in one sentence, and a Claude agent works it in an isolated Docker sandbox and opens a pull request.",
+    bullets: [
+      "Built the pipeline end to end: Claude triages a one line request into a GitHub issue, a Celery worker runs Claude Code in a locked down Docker container, and the board streams the agent's work live over SSE until the pull request opens. Review comments on the PR start a follow up run on the same branch.",
+      "Kept write access out of the sandbox: the agent clones with a **read-only, repo-scoped token**, secrets arrive as a file deleted on first read, outbound traffic goes through an allowlist proxy, and the worker scans every outgoing commit for leaked credentials before it pushes.",
+      "Backed it with **about 1,000 automated tests** across the FastAPI backend, the sandbox runner, the CLI, and the Next.js board, including race tests against real Postgres and a WCAG contrast gate over all 36 color themes.",
+    ],
+    stack: ["Python", "FastAPI", "Celery", "PostgreSQL", "Redis", "Docker", "Next.js", "TypeScript", "Claude Agent SDK", "GitHub Actions"],
+    skills: ["Claude Code", "React", "SQL", "CSS3", "Vitest", "ESLint", "Linux", "Git", "GitHub"],
+    repo: `${GITHUB}/nextix`,
+    // Runs locally against a GitHub App, so there's no live site: the preview is the board with demo data
+    demo: { domain: "localhost:3000", image: nextixShot, height: 625 },
   },
 ];
 
