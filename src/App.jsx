@@ -85,7 +85,7 @@ const OTHER_REPOS = [
   { name: "SHMA", href: `${GITHUB}/Gibbi-Backend`, skills: ["Kotlin", "Spring Boot", "Spring Security", "PostgreSQL", "SQL", "Docker", "Git", "GitHub"] },
   { name: "Fight Up The Hill", href: `${GITHUB}/CS-210-Final-Project`, skills: ["C++", "Git", "GitHub"] },
   // This site: the AI work so far is how it gets built, not a feature inside a project
-  { name: "This portfolio", href: `${GITHUB}/PPhanitchaleun_Portfolio`, skills: ["Claude Code", "nexTix", "Prompt Engineering", "Agentic Workflows"] },
+  { name: "This portfolio", href: `${GITHUB}/PPhanitchaleun_Portfolio`, skills: ["Claude Code", "nexTix"] },
 ];
 
 const SKILL_SOURCES = [
@@ -164,13 +164,25 @@ const TECH = [
   {
     label: "AI & Automation",
     items: [
-      ["Claude Code", null],
-      ["nexTix", null],
-      ["Prompt Engineering", null],
-      ["Agentic Workflows", null],
+      ["Claude Code", "/icons/claude.svg"],
+      ["nexTix", "/icons/nextix.svg"],
     ],
+    // how a change to this site actually ships, start to finish
+    flow: ["Issue", "nexTix branch", "Lint + build", "I review", "Merge", "Auto deploy"],
   },
 ];
+
+// Counted from this repo's git history at build time (vite.config.js), so the numbers never go stale.
+const AI_NOTES = {
+  "Claude Code":
+    __AI_STATS__.claudeCommits > 0
+      ? `${__AI_STATS__.claudeCommits} commits on this site were co-written with Claude Code, in sessions I direct.`
+      : "Commits on this site are co-written with Claude Code, in sessions I direct.",
+  nexTix:
+    __AI_STATS__.nextixPRs > 0
+      ? `${__AI_STATS__.nextixPRs} GitHub issues turned into pull requests: nexTix writes the branch and runs lint and build, then I review and merge.`
+      : "Turns a GitHub issue into a pull request: nexTix writes the branch and runs lint and build, then I review and merge.",
+};
 
 /* ---- Visibility hooks ---- */
 function useInView(options = { threshold: 0.2, rootMargin: "0px 0px -8% 0px" }) {
@@ -266,7 +278,7 @@ function TechBadge({ name, slug, delay, active, onSelect }) {
           <span className="chip__fallback">{name.charAt(0)}</span>
         ) : (
           <img
-            src={`${DEVICON}/${slug}/${slug}-original.svg`}
+            src={slug.startsWith("/") ? slug : `${DEVICON}/${slug}/${slug}-original.svg`}
             alt=""
             width="16"
             height="16"
@@ -489,6 +501,7 @@ function SkillBubble({ skill, onClose }) {
       }}
     >
       <span className="skill-bubble__title">{skill.name}</span>
+      {AI_NOTES[skill.name] && <p className="skill-bubble__note">{AI_NOTES[skill.name]}</p>}
       {matches.length > 0 ? (
         <ul className="skill-bubble__list">
           {matches.map((p) => (
@@ -1546,6 +1559,13 @@ export default function App() {
                     {row.items.map(([name, slug], i) => (
                       <TechBadge key={name} name={name} slug={slug} delay={i * 40} active={activeSkill?.name === name} onSelect={handleSelectSkill} />
                     ))}
+                    {row.flow && (
+                      <ol className="ai-flow" aria-label="How a change to this site ships">
+                        {row.flow.map((step) => (
+                          <li key={step}>{step}</li>
+                        ))}
+                      </ol>
+                    )}
                   </div>
                 </div>
               );
@@ -2172,10 +2192,24 @@ html{
 .chip__icon img{width:16px;height:16px;display:block;}
 .chip__fallback{font-family:var(--font-display);font-size:13px;line-height:1;color:var(--ink-on-light);}
 
+/* AI row: the path a change takes from issue to live site */
+.site ol.ai-flow{
+  flex:1 0 100%;display:flex;flex-wrap:wrap;align-items:center;gap:6px 0;
+  margin:6px 0 0;padding:0;list-style:none;
+  font-size:12.5px;line-height:1.3;color:var(--muted);
+}
+.ai-flow li{display:inline-flex;align-items:center;}
+.ai-flow li + li::before{
+  content:"";width:5px;height:5px;margin:0 10px 0 8px;
+  border-top:1.5px solid currentColor;border-right:1.5px solid currentColor;
+  transform:rotate(45deg);opacity:.55;
+}
+.ai-flow li:last-child{color:var(--text);}
+
 /* ---------- SKILL BUBBLE ---------- */
 .skill-bubble{
   position:absolute;z-index:100;transform:translate(-50%,calc(-100% - 14px));
-  min-width:160px;max-width:230px;
+  min-width:160px;max-width:250px;
   background:color-mix(in srgb,var(--surface) 72%,transparent);color:var(--text);
   backdrop-filter:saturate(160%) blur(14px);-webkit-backdrop-filter:saturate(160%) blur(14px);
   border:1px solid var(--line);
@@ -2199,6 +2233,7 @@ html{
 }
 @keyframes bubbleIn{from{opacity:0;scale:.92;}to{opacity:1;scale:1;}}
 .skill-bubble__title{font-family:var(--font-display);display:block;font-size:16px;margin-bottom:6px;}
+.skill-bubble__note{margin:0 0 8px;font-size:12.5px;line-height:1.45;color:var(--muted);}
 .skill-bubble__empty{margin:0;font-size:12.5px;color:var(--muted);line-height:1.4;}
 .skill-bubble__list{display:flex;flex-direction:column;}
 .skill-bubble__list a{

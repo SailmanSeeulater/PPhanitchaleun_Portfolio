@@ -379,6 +379,7 @@ ${C}{
   --r:14px;
 }
 ${C} .site{overflow-x:clip;}
+${C} .ai-flow{display:none;} /* the chips fly off, so the ship path would float with no context */
 ${C} :is(.nav,.hero,#projects,#tech,#contact,.footer){font-family:var(--font-body);}
 ${C} .font-swap{animation:fontSwap .45s var(--ease);}
 @keyframes fontSwap{0%{scale:1;}35%{scale:1.012;rotate:.4deg;}100%{scale:1;}}
