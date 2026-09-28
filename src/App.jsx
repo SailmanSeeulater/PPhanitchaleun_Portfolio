@@ -893,9 +893,11 @@ function ThemePicker() {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
   const buttonRef = useRef(null);
+  const panelRef = useRef(null);
 
   useEffect(() => {
     if (!open) return;
+    panelRef.current?.querySelector('[aria-pressed="true"]')?.focus({ preventScroll: true });
     const onKey = (e) => {
       if (e.key === "Escape") {
         setOpen(false);
@@ -913,15 +915,21 @@ function ThemePicker() {
     };
   }, [open]);
 
+  const pick = (i) => {
+    select(i);
+    setOpen(false);
+    buttonRef.current?.focus({ preventScroll: true });
+  };
+
   return (
-    <div className="theme-picker" ref={rootRef}>
+    <div className={`theme-picker${open ? " is-open" : ""}`} ref={rootRef}>
       <button
         ref={buttonRef}
         type="button"
         className="theme-toggle"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        aria-controls="theme-menu"
+        aria-controls="theme-panel"
         aria-label={`Color scheme: ${THEMES[current].name}`}
         title="Change color scheme"
       >
@@ -934,18 +942,27 @@ function ThemePicker() {
         </svg>
       </button>
 
-      {open && (
-        <ul className="theme-menu" id="theme-menu" aria-label="Color schemes">
-          {THEMES.map((t, i) => (
-            <li key={t.id}>
-              <button type="button" aria-pressed={i === current} onClick={() => select(i)}>
-                <span className="theme-menu__swatch" style={{ "--a": t.swatch[0], "--b": t.swatch[1] }} aria-hidden="true" />
-                {t.name}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <div
+        ref={panelRef}
+        className="theme-panel"
+        id="theme-panel"
+        role="group"
+        aria-label="Color schemes"
+        inert={!open}
+      >
+        {THEMES.map((t, i) => (
+          <button
+            key={t.id}
+            type="button"
+            className="theme-panel__swatch"
+            style={{ "--a": t.swatch[0], "--b": t.swatch[1] }}
+            aria-pressed={i === current}
+            aria-label={t.name}
+            title={t.name}
+            onClick={() => pick(i)}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -1872,24 +1889,29 @@ html{
 .theme-toggle:hover svg{transform:rotate(-35deg);}
 .theme-toggle:active{transform:scale(.9);}
 .theme-picker{position:relative;display:flex;}
-.site .theme-menu{
+.site .theme-panel{
   position:absolute;top:calc(100% + 12px);right:0;z-index:60;
-  width:220px;max-height:min(70vh,440px);overflow-y:auto;padding:6px;
+  width:min(236px,calc(100vw - var(--gutter) * 2));padding:10px;
+  display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;
   background:var(--surface);border:1px solid var(--line);border-radius:16px;
   box-shadow:0 24px 50px -20px color-mix(in srgb,var(--shadow) 45%,transparent);
-  animation:menuIn .18s var(--ease);
+  opacity:0;visibility:hidden;transform:translateY(-10px) scale(.94);transform-origin:top right;
+  transition:opacity .2s var(--ease),transform .26s var(--ease),visibility 0s linear .26s;
 }
-@keyframes menuIn{from{opacity:0;transform:translateY(-6px) scale(.97);}to{opacity:1;transform:none;}}
-.theme-menu button{
-  display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;
-  border:none;border-radius:10px;background:transparent;color:var(--text);
-  font:inherit;font-size:13.5px;text-align:left;cursor:pointer;
+.theme-picker.is-open .theme-panel{
+  opacity:1;visibility:visible;transform:none;
+  transition:opacity .2s var(--ease),transform .26s var(--ease);
 }
-.theme-menu button:hover,.theme-menu button[aria-pressed="true"]{background:var(--line);}
-.theme-menu__swatch{
-  flex:0 0 auto;width:22px;height:22px;border-radius:50%;
+.theme-panel__swatch{
+  width:100%;aspect-ratio:1;padding:0;border:none;border-radius:50%;cursor:pointer;
   background:radial-gradient(circle,var(--b) 0 38%,var(--a) 42%);
-  box-shadow:inset 0 0 0 1px rgba(0,0,0,.12);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.18);
+  transition:transform .2s var(--ease);
+}
+.theme-panel__swatch:hover{transform:scale(1.14);}
+.site .theme-panel__swatch:focus-visible{border-radius:50%;outline-offset:2px;}
+.theme-panel__swatch[aria-pressed="true"]{
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.18),0 0 0 2px var(--surface),0 0 0 4px var(--accent-fill);
 }
 
 /* ---------- BACKGROUND ---------- */
@@ -2325,6 +2347,7 @@ html{
 @media (max-width:420px){
   .nav__links{gap:14px;}
   .nav__links a{font-size:14px;}
+  .site .theme-panel{grid-template-columns:repeat(5,minmax(0,1fr));}
 }
 
 /* ---------- REDUCED MOTION ---------- */
@@ -2333,8 +2356,9 @@ html{
   .project,.chip{opacity:1 !important;transform:none !important;transition:none !important;}
   .window,.social,.nav__links a::after,.site .project__link,.theme-toggle,.btn-primary,.window__mode{transition:none !important;}
   .window__screenshot{transform:none !important;transition:none !important;animation:none !important;}
-  .skill-bubble,.theme-menu,.bg-dots,.dock__eq i,.footer__pulse::after,.typed__caret::after{animation:none !important;}
+  .skill-bubble,.bg-dots,.dock__eq i,.footer__pulse::after,.typed__caret::after{animation:none !important;}
   .typed__caret{display:none;}
   .dock__panel,.dock__tab{transition:none !important;}
+  .site .theme-panel,.theme-panel__swatch{transform:none !important;transition:none !important;}
 }
 `;
