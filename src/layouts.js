@@ -158,7 +158,7 @@ ${X} .social:hover{background:var(--text);color:var(--bg);border-color:var(--tex
 ${X} .contact__tagline{color:var(--muted);font-size:15px;}
 ${X} .footer{border-top:1px solid var(--rule);font-size:12.5px;}
 ${X} :is(.dock__tab,.ldock__tab,.theme-toggle){box-shadow:none;}
-${X} :is(.dock__panel,.ldock__menu,.theme-menu,.skill-bubble){
+${X} :is(.dock__panel,.ldock__menu,.theme-panel,.skill-bubble){
   border-color:var(--rule);box-shadow:0 24px 60px -30px color-mix(in srgb,var(--shadow) 50%,transparent);
 }
 @media (max-width:760px){
@@ -259,7 +259,7 @@ ${S} .contact{border:1px solid var(--rule);border-radius:28px;box-shadow:none;}
 ${S} .contact__email{font-weight:500;}
 ${S} .footer{border-top:1px solid var(--rule);font-size:12.5px;}
 ${S} :is(.dock__tab,.ldock__tab,.theme-toggle){box-shadow:none;border-color:var(--rule);}
-${S} :is(.dock__panel,.ldock__menu,.theme-menu,.skill-bubble){
+${S} :is(.dock__panel,.ldock__menu,.theme-panel,.skill-bubble){
   border-color:var(--rule);box-shadow:0 24px 60px -30px color-mix(in srgb,var(--shadow) 50%,transparent);
 }
 @media (max-width:760px){
@@ -365,7 +365,7 @@ ${T} .contact__actions{justify-content:flex-start;}
 ${T} .social{background:transparent;border:1px solid var(--line);border-radius:4px;color:var(--term);}
 ${T} .social:hover{background:var(--term);color:var(--on-accent);}
 ${T} .footer{border-top:1px dashed var(--line);}
-${T} :is(.dock__panel,.ldock__menu,.theme-menu,.skill-bubble){border-radius:6px;}
+${T} :is(.dock__panel,.ldock__menu,.theme-panel,.skill-bubble){border-radius:6px;}
 @media (max-width:760px){
   ${T} .nav__brand::before{content:"~$";}
 }
@@ -506,7 +506,7 @@ ${C} .social:nth-child(even){rotate:3deg;}
 ${C} .social:hover{rotate:0deg;transform:translateY(-4px);}
 ${C} .footer{border-top:1.5px solid var(--edge);}
 ${C} :is(.dock__tab,.ldock__tab,.theme-toggle){box-shadow:3px 3px 0 var(--pop);}
-${C} :is(.dock__panel,.ldock__menu,.theme-menu,.skill-bubble){
+${C} :is(.dock__panel,.ldock__menu,.theme-panel,.skill-bubble){
   border:1.5px solid var(--edge);box-shadow:6px 6px 0 var(--pop);backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--sticker);
 }
 ${C} .skill-bubble::after{border-right:1.5px solid var(--edge);border-bottom:1.5px solid var(--edge);background:var(--sticker);}
