@@ -517,6 +517,16 @@ const THEMES = [
   { id: "terminal", name: "Terminal Green", swatch: ["#050805", "#39ff6a"] },
   { id: "slate", name: "Ice & Slate", swatch: ["#eef2f6", "#334155"] },
   { id: "mustard", name: "Charcoal & Mustard", swatch: ["#1f2124", "#f2c230"] },
+  { id: "peach", name: "Peach & Plum", swatch: ["#ffe8d6", "#6b21a8"] },
+  { id: "dune", name: "Dune & Sea", swatch: ["#f1e7d3", "#0f6f7a"] },
+  { id: "sage", name: "Blush & Sage", swatch: ["#f6ebe7", "#3f6b4a"] },
+  { id: "citrus", name: "Citrus & Cobalt", swatch: ["#eef7cf", "#1e40af"] },
+  { id: "quartz", name: "Rose Quartz & Wine", swatch: ["#fbe4ec", "#9d174d"] },
+  { id: "butter", name: "Butter & Berry", swatch: ["#fff5d1", "#a21caf"] },
+  { id: "linen", name: "Linen & Indigo", swatch: ["#f5f1e8", "#3730a3"] },
+  { id: "seafoam", name: "Seafoam & Rust", swatch: ["#dff0ec", "#9a3412"] },
+  { id: "abyss", name: "Abyss & Aqua", swatch: ["#04252c", "#4fe0d2"] },
+  { id: "ink", name: "Ink & Periwinkle", swatch: ["#12142b", "#aab6ff"] },
 ];
 
 // Your GoatCounter site code, e.g. "perfect" for https://perfect.goatcounter.com
@@ -1720,6 +1730,70 @@ const CSS = `
   --line:rgba(242,194,48,.22);--tagline:#a9a69d;
   --grain-opacity:.07;--grain-blend:screen;
 }
+:root[data-theme="peach"]{
+  --bg:#ffe8d6;--surface:#fff4ec;--card:#fff4ec;--placeholder:#ffe8d6;
+  --brand:#6b21a8;--card-ink:#6b21a8;--ink-on-light:#6b21a8;--shadow:#6b21a8;
+  --text:#3b0764;--accent:#3b0764;
+  --line:rgba(107,33,168,.2);--tagline:#7a6172;
+}
+:root[data-theme="dune"]{
+  --bg:#f1e7d3;--surface:#fbf5ea;--card:#fbf5ea;--placeholder:#f1e7d3;
+  --brand:#0f6f7a;--card-ink:#0f6f7a;--ink-on-light:#0f6f7a;--shadow:#0f6f7a;
+  --text:#0b3b42;--accent:#0b3b42;
+  --line:rgba(15,111,122,.2);--tagline:#6b6355;
+}
+:root[data-theme="sage"]{
+  --bg:#f6ebe7;--surface:#fdf6f4;--card:#fdf6f4;--placeholder:#f6ebe7;
+  --brand:#3f6b4a;--card-ink:#3f6b4a;--ink-on-light:#3f6b4a;--shadow:#3f6b4a;
+  --text:#1f3a27;--accent:#1f3a27;
+  --line:rgba(63,107,74,.2);--tagline:#6f6660;
+}
+:root[data-theme="citrus"]{
+  --bg:#eef7cf;--surface:#f7fbe6;--card:#f7fbe6;--placeholder:#eef7cf;
+  --brand:#1e40af;--card-ink:#1e40af;--ink-on-light:#1e40af;--shadow:#1e40af;
+  --text:#16265e;--accent:#16265e;
+  --line:rgba(30,64,175,.2);--tagline:#5c6650;
+}
+:root[data-theme="quartz"]{
+  --bg:#fbe4ec;--surface:#fdf1f5;--card:#fdf1f5;--placeholder:#fbe4ec;
+  --brand:#9d174d;--card-ink:#9d174d;--ink-on-light:#9d174d;--shadow:#9d174d;
+  --text:#4c0519;--accent:#4c0519;
+  --line:rgba(157,23,77,.2);--tagline:#7d5b67;
+}
+:root[data-theme="butter"]{
+  --bg:#fff5d1;--surface:#fffbe9;--card:#fffbe9;--placeholder:#fff5d1;
+  --brand:#a21caf;--card-ink:#a21caf;--ink-on-light:#a21caf;--shadow:#a21caf;
+  --text:#4a0d52;--accent:#4a0d52;
+  --line:rgba(162,28,175,.2);--tagline:#7a6a4a;
+}
+:root[data-theme="linen"]{
+  --bg:#f5f1e8;--surface:#fcfaf4;--card:#fcfaf4;--placeholder:#f5f1e8;
+  --brand:#3730a3;--card-ink:#3730a3;--ink-on-light:#3730a3;--shadow:#3730a3;
+  --text:#1e1b4b;--accent:#1e1b4b;
+  --line:rgba(55,48,163,.2);--tagline:#6b6759;
+}
+:root[data-theme="seafoam"]{
+  --bg:#dff0ec;--surface:#f1f9f7;--card:#f1f9f7;--placeholder:#dff0ec;
+  --brand:#9a3412;--card-ink:#9a3412;--ink-on-light:#9a3412;--shadow:#9a3412;
+  --text:#4a1c08;--accent:#4a1c08;
+  --line:rgba(154,52,18,.2);--tagline:#5f6b66;
+}
+:root[data-theme="abyss"]{
+  color-scheme:dark;
+  --bg:#04252c;--surface:#0b3540;--card:#0b3540;--placeholder:#0b3540;
+  --brand:#4fe0d2;--card-ink:#4fe0d2;--on-accent:#04252c;--ink-on-light:#04252c;--shadow:#000;
+  --text:#e6fbf8;--accent:#4fe0d2;
+  --line:rgba(79,224,210,.22);--tagline:#8fb3b0;
+  --grain-opacity:.07;--grain-blend:screen;
+}
+:root[data-theme="ink"]{
+  color-scheme:dark;
+  --bg:#12142b;--surface:#1d2040;--card:#1d2040;--placeholder:#1d2040;
+  --brand:#aab6ff;--card-ink:#aab6ff;--on-accent:#12142b;--ink-on-light:#12142b;--shadow:#000;
+  --text:#ecefff;--accent:#aab6ff;
+  --line:rgba(170,182,255,.22);--tagline:#9298c2;
+  --grain-opacity:.07;--grain-blend:screen;
+}
 
 *{box-sizing:border-box;}
 html{
@@ -2063,7 +2137,7 @@ html{
   box-shadow:inset 0 0 0 1px rgba(0,0,0,.06);
 }
 .chip__icon img{width:16px;height:16px;display:block;}
-.chip__fallback{font-family:var(--font-display);font-size:13px;line-height:1;color:#800020;}
+.chip__fallback{font-family:var(--font-display);font-size:13px;line-height:1;color:var(--ink-on-light);}
 
 /* ---------- SKILL BUBBLE ---------- */
 .skill-bubble{
