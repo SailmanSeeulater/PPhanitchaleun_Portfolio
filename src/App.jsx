@@ -84,6 +84,8 @@ const PROJECTS = [
 const OTHER_REPOS = [
   { name: "SHMA", href: `${GITHUB}/Gibbi-Backend`, skills: ["Kotlin", "Spring Boot", "Spring Security", "PostgreSQL", "SQL", "Docker", "Git", "GitHub"] },
   { name: "Fight Up The Hill", href: `${GITHUB}/CS-210-Final-Project`, skills: ["C++", "Git", "GitHub"] },
+  // This site: the AI work so far is how it gets built, not a feature inside a project
+  { name: "This portfolio", href: `${GITHUB}/PPhanitchaleun_Portfolio`, skills: ["Claude Code", "nexTix", "Prompt Engineering", "Agentic Workflows"] },
 ];
 
 const SKILL_SOURCES = [
@@ -157,6 +159,15 @@ const TECH = [
       ["Oracle Cloud", "oracle"],
       ["Git", "git"],
       ["GitHub", "github"],
+    ],
+  },
+  {
+    label: "AI & Automation",
+    items: [
+      ["Claude Code", null],
+      ["nexTix", null],
+      ["Prompt Engineering", null],
+      ["Agentic Workflows", null],
     ],
   },
 ];
