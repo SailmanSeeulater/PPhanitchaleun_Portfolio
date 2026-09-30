@@ -27,7 +27,7 @@ Perfect builds and runs their own production infrastructure, not just class assi
 - Visitors arrive from a résumé, LinkedIn, or a job application link, usually on a laptop, sometimes on a phone.
 - The résumé PDF (`public/resume.pdf`) is a primary conversion action.
 - Contact happens by email (perfectphanitchaleun@gmail.com), LinkedIn, or GitHub.
-- The site is a single page: hero, projects, tech stack, contact.
+- The site is a single page: hero, projects, experience, tech stack, contact.
 
 ## Capabilities and Constraints
 
@@ -50,10 +50,11 @@ Perfect builds and runs their own production infrastructure, not just class assi
 - Lonely Chess (lonelychess.latesailor.dev): esoteric language where PGN chess games execute as code; Python interpreter plus TypeScript in-browser port; FizzBuzz as a 2,669 move game. CS 420 final project with Nicolaus ReyasBautista.
 - pdfyier (pdfyier.latesailor.dev): image-to-PDF tool, FastAPI + ImageMagick behind nginx, RAM-backed temp storage.
 - Odin's Kin (github.com/SailmanSeeulater/odins_kin, runs locally on Windows, not deployed): Tkinter + Pillow desktop tracker and a Flask dashboard styled after iOS Screen Time; fixed a bug that re-saved earlier sessions' events (about 3 hours double counted in real data) and a KeyError that lost sessions on stop; window titles dropped by default, YouTube links matched from browser history; closed an XSS hole where window titles rendered as HTML; save animation cut from ~30 ms to ~2 ms a frame (60 fps); 26 unit tests. Screenshots use synthetic demo data.
+- H.E.R.S.365 (Web Developer Intern, Jul to Aug 2026, Oceanside, CA, remote; a moderated community platform for girls' flag football): fixed 2 pre-launch Stripe billing defects (a webhook path that charged without recording the transaction, a lookup that billed the wrong tier), each proven by reintroducing the bug and watching the new test fail; built a COPPA-compliant parent approval sign-in on the existing JWT layer; containerized production with Docker Compose and nginx; automated nightly PostgreSQL backups with compression, retention pruning, and integrity checks. Source: the backend résumé. Listed in the Experience section (`EXPERIENCE` in `src/App.jsx`).
 - Other repos: SHMA / Gibbi-Backend (Kotlin, Spring Boot), Fight Up The Hill (C++).
 - AI work to date is how this portfolio gets built, not a feature shipped inside a project: Claude Code writes changes here (co-authored commits since the layouts work), and nexTix turns a written issue into a branch, a lint and build run, and a pull request Perfect reviews and merges. The tech stack section lists this as "AI & Automation" with only the two tools that have a paper trail (Claude Code, nexTix), popups whose counts are read from git history at build time, and a strip showing the issue to deploy path. Nothing beyond that is claimed: no model APIs, RAG, or fine tuning until there is a repo behind it.
 - Assets: headshot (`src/assets/profile.jpg`), project screenshots (`src/assets/screenshots/`), résumé PDF.
-- Absent, must not be fabricated: testimonials, employer names, internship history, metrics beyond those above, school and graduation date.
+- Absent, must not be fabricated: testimonials, employers or internships beyond those in the Experience section, metrics beyond those above, school and graduation date.
 
 ## Product Principles
 
