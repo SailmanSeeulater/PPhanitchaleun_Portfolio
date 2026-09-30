@@ -24,6 +24,31 @@ const rich = (text) =>
 const prefersReducedMotion = () =>
   typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
+const EXPERIENCE = [
+  {
+    role: "Founding Engineer",
+    org: "Stealth Startup",
+    about: "Coming soon...",
+    meta: ["Sep 2026 to Present", "San Diego, CA"],
+    bullets: [
+      "**67 to the flow state**"
+    ],
+    stack: ["67"],
+  },
+  {
+    role: "Web Developer Intern",
+    org: "H.E.R.S.365",
+    about: "a moderated community platform for girls' flag football",
+    meta: ["Jul to Aug 2026", "Oceanside, CA", "Remote"],
+    bullets: [
+      "Fixed **2 pre-launch Stripe billing defects**: a webhook path that charged a customer without recording the transaction, and a price lookup that billed the wrong tier. Proved each fix by reintroducing the bug and watching the new test fail.",
+      "Built a **COPPA-compliant parent approval sign-in**: a guardian authorizes their child's account, and unanswered requests expire. It extends the existing JWT layer instead of forking a second auth path.",
+      "Containerized production with Docker Compose and nginx, and automated **nightly PostgreSQL backups** with compression, retention pruning, and integrity checks, so a failing dump surfaces before an outage does.",
+    ],
+    stack: ["Stripe", "JWT", "PostgreSQL", "Docker Compose", "nginx"],
+  },
+];
+
 const PROJECTS = [
     {
     name: "nexTix",
@@ -439,6 +464,37 @@ function ProjectRow({ project, index }) {
       </div>
 
       <ScrollPreview project={project} />
+    </article>
+  );
+}
+
+function JobRow({ job, index }) {
+  const [ref, inView] = useInView();
+  return (
+    <article ref={ref} className={`job ${inView ? "is-visible" : ""}`} aria-labelledby={`job-${index} job-${index}-org`}>
+      <p className="job__meta">
+        {job.meta.map((m) => (
+          <span key={m}>{m}</span>
+        ))}
+      </p>
+      <div className="job__body">
+        <h3 id={`job-${index}`} className="job__role">
+          {job.role}
+        </h3>
+        <p id={`job-${index}-org`} className="job__org">
+          <strong>{job.org}</strong> · {job.about}
+        </p>
+        <ul className="bullets job__bullets">
+          {job.bullets.map((b, i) => (
+            <li key={i}>{rich(b)}</li>
+          ))}
+        </ul>
+        <ul className="project__stack" aria-label={`${job.org} tech stack`}>
+          {job.stack.map((t) => (
+            <li key={t}>{t}</li>
+          ))}
+        </ul>
+      </div>
     </article>
   );
 }
@@ -1057,7 +1113,7 @@ const CHAOS_FONTS = [
   ["Rubik Mono One", "monospace", 0.74, false],
 ];
 const CHAOS_BODY_FONTS = CHAOS_FONTS.filter((f) => f[3]).concat([["RX100", "monospace", 1, true], ["Inter", "sans-serif", 1, true]]);
-const CHAOS_SECTIONS = [".nav", ".hero", "#projects", "#tech", "#contact", ".footer"];
+const CHAOS_SECTIONS = [".nav", ".hero", "#projects", "#experience", "#tech", "#contact", ".footer"];
 
 function useFontRoulette(active) {
   useEffect(() => {
@@ -1518,7 +1574,8 @@ export default function App() {
         <div className="nav__right">
           <nav className="nav__links" aria-label="Primary">
             <a href="#projects">Projects</a>
-            <a href="#tech">Tech Stack</a>
+            <a href="#experience">Experience</a>
+            <a href="#tech"><span className="nav__long">Tech </span>Stack</a>
             <a href="#contact">Contact</a>
           </nav>
           <ThemePicker />
@@ -1550,7 +1607,7 @@ export default function App() {
         </section>
 
         {/* ---------- PROJECTS ---------- */}
-        <section id="projects" className="section section--projects" aria-labelledby="projects-title">
+        <section id="projects" className="section" aria-labelledby="projects-title">
           <div className="projects__head">
             <h2 id="projects-title" className="section__title">Projects</h2>
             {layoutId === "sliding" && <RailControls railRef={railRef} count={PROJECTS.length} />}
@@ -1558,6 +1615,16 @@ export default function App() {
           <div className="projects" ref={railRef}>
             {PROJECTS.map((p, i) => (
               <ProjectRow key={p.name} project={p} index={i} />
+            ))}
+          </div>
+        </section>
+
+        {/* ---------- EXPERIENCE ---------- */}
+        <section id="experience" className="section" aria-labelledby="experience-title">
+          <h2 id="experience-title" className="section__title">Experience</h2>
+          <div className="jobs">
+            {EXPERIENCE.map((job, i) => (
+              <JobRow key={job.org} job={job} index={i} />
             ))}
           </div>
         </section>
@@ -2054,7 +2121,7 @@ html{
   padding:clamp(72px,10vw,128px) var(--gutter);
   scroll-margin-top:var(--nav-h);
 }
-.section--projects{padding-top:clamp(40px,6vw,72px);}
+.hero + .section{padding-top:clamp(40px,6vw,72px);}
 .section__title{
   font-family:var(--font-display);
   font-size:clamp(36px,5.6vw,64px);line-height:1.02;
@@ -2117,6 +2184,24 @@ html{
 }
 .site .hero__secondary:hover{color:var(--accent-fill);}
 .hero__resume-date{margin:12px 0 0;font-size:13.5px;color:var(--muted);}
+
+/* ---------- EXPERIENCE ---------- */
+/* date column matches the tech rows' label column, so the two sections share a left edge */
+#experience .section__title{margin-bottom:clamp(24px,3.4vw,40px);}
+.job{
+  display:grid;grid-template-columns:150px minmax(0,1fr);gap:clamp(12px,3vw,32px);
+  align-items:start;padding:clamp(26px,3.4vw,40px) 0;
+  border-top:1px solid var(--line);
+  opacity:0;transform:translateY(28px);
+  transition:opacity .8s var(--ease),transform .8s var(--ease);
+}
+.job:last-child{border-bottom:1px solid var(--line);}
+.job.is-visible{opacity:1;transform:none;}
+.job__meta{display:flex;flex-direction:column;gap:2px;margin:0;padding-top:8px;font-size:14px;color:var(--muted);letter-spacing:.02em;}
+.job__role{font-family:var(--font-display);margin:0;font-size:clamp(26px,2.8vw,32px);line-height:1.1;letter-spacing:.01em;}
+.job__org{margin:10px 0 0;font-size:clamp(16px,1.5vw,17.5px);line-height:1.5;}
+.site .job ul.bullets{max-width:72ch;}
+.job__org strong{font-weight:inherit;color:color-mix(in srgb,var(--accent-fill) 75%,var(--text));}
 
 /* ---------- PROJECTS ---------- */
 .projects__head{display:contents;}
@@ -2455,6 +2540,8 @@ html{
 @media (max-width:760px){
   .hero{flex-direction:column;align-items:flex-start;}
   .hero__intro{flex:none;width:100%;}
+  .job{grid-template-columns:minmax(0,1fr);gap:10px;}
+  .job__meta{flex-direction:row;flex-wrap:wrap;gap:2px 16px;padding-top:0;font-size:13.5px;}
   .tech__row{grid-template-columns:1fr;gap:10px;padding:16px 0;}
   .tech__label{padding-top:0;}
   .chip{min-height:38px;font-size:13px;}
@@ -2469,15 +2556,21 @@ html{
   .dock__eq i{width:4px;}
 }
 @media (max-width:420px){
-  .nav__links{gap:14px;}
+  .nav__right{gap:12px;}
+  .nav__links{gap:11px;}
   .nav__links a{font-size:14px;}
+  /* four links only fit on a phone as "Stack"; screen readers still hear "Tech Stack" */
+  .nav__long{
+    position:absolute;width:1px;height:1px;margin:-1px;padding:0;
+    overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;
+  }
   .site .theme-panel{grid-template-columns:repeat(5,minmax(0,1fr));}
 }
 
 /* ---------- REDUCED MOTION ---------- */
 @media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto;}
-  .project,.chip{opacity:1 !important;transform:none !important;transition:none !important;}
+  .project,.job,.chip{opacity:1 !important;transform:none !important;transition:none !important;}
   .window,.social,.nav__links a::after,.site .project__link,.theme-toggle,.btn-primary,.window__mode{transition:none !important;}
   .window__screenshot{transform:none !important;transition:none !important;animation:none !important;}
   .skill-bubble,.bg-dots,.dock__eq i,.footer__pulse::after,.typed__caret::after{animation:none !important;}

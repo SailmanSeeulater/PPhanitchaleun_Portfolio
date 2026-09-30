@@ -73,7 +73,7 @@ ${X}{
 ${X} .site{letter-spacing:-.005em;}
 ${X} .hero::before{display:none;}
 ${X} .bg-dots{display:none;}
-${X} :is(.hero__name,.section__title,.project__name,.contact__heading){font-weight:600;letter-spacing:-.035em;}
+${X} :is(.hero__name,.section__title,.project__name,.contact__heading,.job__role){font-weight:600;letter-spacing:-.035em;}
 ${X} .nav{
   background:color-mix(in srgb,var(--bg) 84%,transparent);
   border-bottom:1px solid var(--rule);
@@ -119,6 +119,12 @@ ${X} .section__title{
   font-size:clamp(34px,5.2vw,68px);line-height:1;
   padding-top:20px;border-top:1px solid var(--rule);
 }
+${X} .job{border-top:1px solid var(--rule);}
+${X} .job:last-child{border-bottom:1px solid var(--rule);}
+${X} .job__meta{padding-top:12px;font-size:11.5px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;}
+${X} .job__role{font-size:clamp(28px,3.2vw,42px);}
+${X} .job__org{font-size:clamp(17px,1.6vw,20px);font-weight:500;letter-spacing:-.015em;line-height:1.35;}
+${X} .job__org strong{color:var(--text);font-weight:600;}
 ${X} .projects{gap:clamp(40px,6vw,80px);}
 ${X} .project{padding-top:clamp(28px,4vw,48px);border-top:1px solid var(--rule);}
 ${X} .project:first-child{padding-top:0;border-top:none;}
@@ -175,7 +181,7 @@ ${S}{
   --grain-opacity:.04;
 }
 ${S} .site{overflow-x:clip;letter-spacing:-.006em;}
-${S} :is(.hero__name,.section__title,.project__name,.contact__heading){font-weight:600;letter-spacing:-.03em;}
+${S} :is(.hero__name,.section__title,.project__name,.contact__heading,.job__role){font-weight:600;letter-spacing:-.03em;}
 ${S} .nav{border-bottom:1px solid var(--rule);}
 ${S} .nav__brand{font-weight:600;letter-spacing:-.02em;}
 ${S} .nav__links a{font-size:14px;font-weight:500;}
@@ -189,6 +195,9 @@ ${S} .btn-primary:hover{transform:none;opacity:.8;}
 ${S} .hero__secondary{font-weight:500;text-decoration-thickness:1px;text-decoration-color:var(--rule);}
 ${S} .hero__secondary:hover{color:var(--text);text-decoration-color:var(--text);}
 ${S} .section__title{font-size:clamp(32px,4.6vw,56px);line-height:1;}
+${S} .job{border:1px solid var(--rule);border-radius:24px;background:var(--surface);padding:clamp(22px,2.6vw,32px);}
+${S} .job__meta{font-size:13px;font-weight:500;}
+${S} .job__org strong{color:var(--text);font-weight:600;}
 
 /* the rail: bleeds to the viewport edges, snaps card by card, scrollbar hidden */
 ${S} .projects__head{
@@ -262,6 +271,9 @@ ${S} :is(.dock__tab,.ldock__tab,.theme-toggle){box-shadow:none;border-color:var(
 ${S} :is(.dock__panel,.ldock__menu,.theme-panel,.skill-bubble){
   border-color:var(--rule);box-shadow:0 24px 60px -30px color-mix(in srgb,var(--shadow) 50%,transparent);
 }
+@media (max-width:420px){
+  ${S} .nav__links a{font-size:13px;}
+}
 @media (max-width:760px){
   ${S} .projects__head{flex-direction:column;align-items:flex-start;gap:14px;}
   ${S} .project{flex-basis:86vw;}
@@ -279,7 +291,7 @@ ${T}{
   --line:color-mix(in srgb,var(--term) 28%,transparent);
   --font-display:'VT323',ui-monospace,monospace;
 }
-${T} :is(.hero__name,.section__title,.project__name,.contact__heading){font-weight:400;}
+${T} :is(.hero__name,.section__title,.project__name,.contact__heading,.job__role){font-weight:400;}
 ${T} .hero::before{display:none;}
 ${T} .bg-dots{animation:none;background-image:none;}
 ${T} .bg-dots::after{
@@ -310,7 +322,7 @@ ${T} .bg-grain::before{
 @keyframes crtRoll{to{top:125vh;}}
 @keyframes crtFlicker{0%,100%{opacity:1;}47%{opacity:.985;}48%{opacity:1;}91%{opacity:.975;}92%{opacity:1;}}
 ${T} .site{text-shadow:0 0 1px color-mix(in srgb,var(--text) 40%,transparent);}
-${T} :is(.hero__name,.section__title,.project__name,.contact__heading){
+${T} :is(.hero__name,.section__title,.project__name,.contact__heading,.job__role){
   color:var(--term);text-shadow:0 0 calc(12px + var(--beat,0) * 10px) color-mix(in srgb,var(--term) calc(45% + var(--beat,0) * 15%),transparent);
 }
 ${T} .nav{background:color-mix(in srgb,var(--bg) 90%,transparent);border-bottom:1px solid var(--line);}
@@ -338,6 +350,13 @@ ${T} .btn-primary::after{content:"]";}
 ${T} .btn-primary:hover{background:var(--term);color:var(--on-accent);transform:none;opacity:1;}
 ${T} .section__title{font-size:clamp(42px,6vw,78px);text-transform:lowercase;}
 ${T} .section__title::before{content:"~/";color:var(--muted);text-shadow:none;}
+${T} .job{border-top:1px dashed var(--line);}
+${T} .job:last-child{border-bottom:1px dashed var(--line);}
+${T} .job__meta{color:var(--term);}
+${T} .job__meta span:first-child::before{content:"# ";color:var(--muted);}
+${T} .job__role{font-size:clamp(38px,4vw,54px);line-height:1;}
+${T} .job__role::before{content:"> ";color:var(--muted);text-shadow:none;}
+${T} .job__org strong{color:var(--term);}
 ${T} .project{border-top:1px dashed var(--line);}
 ${T} .project:first-child{border-top:none;}
 ${T} .project__name{font-size:clamp(38px,4vw,54px);line-height:1;}
@@ -369,6 +388,9 @@ ${T} :is(.dock__panel,.ldock__menu,.theme-panel,.skill-bubble){border-radius:6px
 @media (max-width:760px){
   ${T} .nav__brand::before{content:"~$";}
 }
+@media (max-width:420px){
+  ${T} .nav__links a::before{content:none;} /* four links don't fit with the ./ prefix */
+}
 
 /* ================= CHAOS (stickers, tilt, and the skills got loose) ================= */
 ${C}{
@@ -380,7 +402,7 @@ ${C}{
 }
 ${C} .site{overflow-x:clip;}
 ${C} .ai-flow{display:none;} /* the chips fly off, so the ship path would float with no context */
-${C} :is(.nav,.hero,#projects,#tech,#contact,.footer){font-family:var(--font-body);}
+${C} :is(.nav,.hero,#projects,#experience,#tech,#contact,.footer){font-family:var(--font-body);}
 ${C} .font-swap{animation:fontSwap .45s var(--ease);}
 @keyframes fontSwap{0%{scale:1;}35%{scale:1.012;rotate:.4deg;}100%{scale:1;}}
 ${C} .hero::before{display:none;}
@@ -439,6 +461,19 @@ ${C} .section__title{
   rotate:-2deg;transform-origin:left bottom;margin-left:.02em;
 }
 ${C} .section__title::after{content:"!";color:var(--accent-fill);}
+${C} .job,${C} .job:last-child{
+  padding:clamp(18px,2.6vw,32px);border:1.5px solid var(--edge);border-radius:var(--r);background:var(--sticker);
+  box-shadow:0 26px 50px -30px color-mix(in srgb,var(--shadow) 40%,transparent),8px 8px 0 var(--pop-accent);
+  rotate:.8deg;
+  transition:rotate .35s var(--ease),opacity .8s var(--ease),transform .8s var(--ease);
+}
+${C} .job:hover{rotate:0deg;}
+${C} .job__meta span:first-child{
+  width:fit-content;padding:3px 11px;border-radius:999px;rotate:-3deg;margin-bottom:6px;
+  background:var(--accent-fill);color:var(--on-accent);box-shadow:3px 3px 0 var(--pop);
+}
+${C} .job__role{font-size:calc(clamp(34px,4vw,54px) * var(--font-scale,1));line-height:1.05;}
+${C} .job__org{font-family:var(--font-display);font-size:19px;}
 ${C} .projects{gap:clamp(44px,6vw,68px);}
 ${C} .project,${C} .project:first-child{
   padding:clamp(18px,2.6vw,32px);border:1.5px solid var(--edge);border-radius:var(--r);background:var(--sticker);
@@ -512,7 +547,9 @@ ${C} :is(.dock__panel,.ldock__menu,.theme-panel,.skill-bubble){
 }
 ${C} .skill-bubble::after{border-right:1.5px solid var(--edge);border-bottom:1.5px solid var(--edge);background:var(--sticker);}
 @media (max-width:760px){
-  ${C} .nav__links a{font-size:13px;rotate:0deg;white-space:nowrap;}
+  /* body fonts only: the wide display fonts (Press Start 2P, Bungee...) push four links off a phone */
+  ${C} .nav__links a{font-family:var(--font-body);font-size:12.5px;rotate:0deg;white-space:nowrap;}
+  ${C} .nav__brand{font-size:16px;padding:3px 8px;}
   ${C} .hero__photo{position:static;width:min(60%,260px);margin:0 0 26px 6px;}
   /* phones: no pile (it would bury the screen); the chips stay put and hop on the beat */
   ${C} .tech{min-height:0;}
@@ -525,7 +562,8 @@ ${C} .skill-bubble::after{border-right:1.5px solid var(--edge);border-bottom:1.5
   ${C} .tech.is-visible .chip:nth-child(2n){transform:translateY(calc(var(--beat,0) * -6px)) rotate(calc(var(--beat,0) * -3deg));}
   ${C} .hero__name{font-size:calc(clamp(40px,11.5vw,90px) * var(--font-scale,1));}
   ${C} .section__title{rotate:-1.5deg;}
-  ${C} .project,${C} .project:first-child{box-shadow:6px 6px 0 var(--pop-accent);}
+  ${C} .project,${C} .project:first-child,${C} .job,${C} .job:last-child{box-shadow:6px 6px 0 var(--pop-accent);}
+  ${C} .job__meta span:first-child{margin-bottom:0;}
 }
 @media (prefers-reduced-motion:reduce){
   ${C} .bg-dots,${C} .hero__photo,${C} .typed__ch{animation:none !important;}
