@@ -515,13 +515,57 @@ const Icons = {
   ),
 };
 
-function SocialButton({ kind, href, label }) {
-  return (
-    <a className="social" href={href} target="_blank" rel="noreferrer" aria-label={label}>
+function SocialButton({ kind, href, label, confirm }) {
+  const [asking, setAsking] = useState(false);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    if (!asking) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") setAsking(false);
+    };
+    const onOutside = (e) => {
+      if (!wrapRef.current?.contains(e.target)) setAsking(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onOutside);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onOutside);
+    };
+  }, [asking]);
+
+  // first click only asks; the second goes through to the link as usual
+  const onClick = (e) => {
+    if (!asking) e.preventDefault();
+    setAsking(!asking);
+  };
+
+  const link = (
+    <a
+      className="social"
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      aria-label={label}
+      onClick={confirm ? onClick : undefined}
+      onBlur={confirm ? () => setAsking(false) : undefined}
+    >
       <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
         {Icons[kind]}
       </svg>
     </a>
+  );
+  if (!confirm) return link;
+
+  return (
+    <span className="social-confirm" ref={wrapRef}>
+      {link}
+      {/* always mounted so screen readers announce the text when it appears */}
+      <span className="social-confirm__bubble" role="status">
+        {asking ? confirm : ""}
+      </span>
+    </span>
   );
 }
 
@@ -1678,7 +1722,7 @@ export default function App() {
               <div className="contact__socials">
                 <SocialButton kind="github" href={GITHUB} label="GitHub" />
                 <SocialButton kind="linkedin" href="https://www.linkedin.com/in/perfect-phanitchaleun" label="LinkedIn" />
-                <SocialButton kind="globe" href="https://latesailor.dev" label="Personal website" />
+                <SocialButton kind="globe" href="https://latesailor.dev" label="Personal website" confirm="are you sure bud?" />
                 <SocialButton kind="soundcloud" href={SC_PROFILE} label="SoundCloud" />
               </div>
             </div>
@@ -2514,6 +2558,24 @@ html{
   transition:transform .25s var(--ease),background .25s var(--ease),color .25s var(--ease);
 }
 .social:hover{transform:translateY(-4px);background:var(--card-ink);color:var(--on-accent);}
+/* the website button asks first: a speech bubble under it until the second click
+   (under, so it never covers the résumé button when the row wraps on phones) */
+.social-confirm{position:relative;display:inline-flex;}
+.social-confirm__bubble{
+  position:absolute;left:50%;top:calc(100% + 8px);z-index:5;
+  translate:-50% 0;white-space:nowrap;pointer-events:none;
+  padding:6px 11px;border-radius:12px;
+  background:var(--card-ink);color:var(--on-accent);
+  font-size:13.5px;line-height:1.2;
+  box-shadow:0 14px 30px -14px color-mix(in srgb,var(--shadow) 60%,transparent);
+  animation:bubbleIn .18s var(--ease);transform-origin:50% 0;
+}
+.social-confirm__bubble:empty{display:none;}
+.social-confirm__bubble::after{
+  content:"";position:absolute;left:50%;bottom:100%;
+  border:6px solid transparent;border-bottom-color:var(--card-ink);
+  translate:-50% 0;
+}
 .contact__tagline{margin:38px 0 0;font-size:17px;color:var(--tagline);}
 
 /* ---------- FOOTER ---------- */
@@ -2573,7 +2635,7 @@ html{
   .project,.job,.chip{opacity:1 !important;transform:none !important;transition:none !important;}
   .window,.social,.nav__links a::after,.site .project__link,.theme-toggle,.btn-primary,.window__mode{transition:none !important;}
   .window__screenshot{transform:none !important;transition:none !important;animation:none !important;}
-  .skill-bubble,.bg-dots,.dock__eq i,.footer__pulse::after,.typed__caret::after{animation:none !important;}
+  .skill-bubble,.social-confirm__bubble,.bg-dots,.dock__eq i,.footer__pulse::after,.typed__caret::after{animation:none !important;}
   .typed__caret{display:none;}
   .dock__panel,.dock__tab{transition:none !important;}
   .site .theme-panel,.theme-panel__swatch{transform:none !important;transition:none !important;}
