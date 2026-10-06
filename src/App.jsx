@@ -673,6 +673,11 @@ const THEMES = [
   { id: "plum", name: "Plum & Lemon", swatch: ["#2d0f2a", "#f6e06b"] },
   { id: "cobalt", name: "Cobalt & Cyan", swatch: ["#101f4a", "#6fe3ff"] },
   { id: "onyx", name: "Onyx & Violet", swatch: ["#121016", "#bb92ff"] },
+  { id: "graphite", name: "Graphite & Coral", swatch: ["#17181c", "#ff7a66"] },
+  { id: "eclipse", name: "Eclipse & Silver", swatch: ["#0b0c0f", "#ccd4e2"] },
+  { id: "oxblood", name: "Oxblood & Cream", swatch: ["#26090e", "#f2e2cd"] },
+  { id: "spruce", name: "Spruce & Blush", swatch: ["#0e1d1a", "#ffb3c7"] },
+  { id: "nebula", name: "Nebula & Ice", swatch: ["#171428", "#a8e8ff"] },
 ];
 
 // Your GoatCounter site code, e.g. "perfect" for https://perfect.goatcounter.com
@@ -2029,6 +2034,46 @@ const CSS = `
   --brand:#bb92ff;--card-ink:#bb92ff;--on-accent:#121016;--ink-on-light:#121016;--shadow:#000;
   --text:#efecf5;--accent:#bb92ff;
   --line:rgba(187,146,255,.22);--tagline:#9b95a8;
+  --grain-opacity:.07;--grain-blend:screen;
+}
+:root[data-theme="graphite"]{
+  color-scheme:dark;
+  --bg:#17181c;--surface:#22242a;--card:#22242a;--placeholder:#22242a;
+  --brand:#ff7a66;--card-ink:#ff7a66;--on-accent:#17181c;--ink-on-light:#17181c;--shadow:#000;
+  --text:#f1efec;--accent:#ff7a66;
+  --line:rgba(255,122,102,.22);--tagline:#a3a4ab;
+  --grain-opacity:.07;--grain-blend:screen;
+}
+:root[data-theme="eclipse"]{
+  color-scheme:dark;
+  --bg:#0b0c0f;--surface:#15171c;--card:#15171c;--placeholder:#15171c;
+  --brand:#ccd4e2;--card-ink:#ccd4e2;--on-accent:#0b0c0f;--ink-on-light:#0b0c0f;--shadow:#000;
+  --text:#eef1f6;--accent:#ccd4e2;
+  --line:rgba(204,212,226,.22);--tagline:#959ba8;
+  --grain-opacity:.07;--grain-blend:screen;
+}
+:root[data-theme="oxblood"]{
+  color-scheme:dark;
+  --bg:#26090e;--surface:#351217;--card:#351217;--placeholder:#351217;
+  --brand:#f2e2cd;--card-ink:#f2e2cd;--on-accent:#26090e;--ink-on-light:#26090e;--shadow:#000;
+  --text:#faeee4;--accent:#f2e2cd;
+  --line:rgba(242,226,205,.22);--tagline:#c3a39b;
+  --grain-opacity:.07;--grain-blend:screen;
+}
+:root[data-theme="spruce"]{
+  color-scheme:dark;
+  --bg:#0e1d1a;--surface:#172b27;--card:#172b27;--placeholder:#172b27;
+  --brand:#ffb3c7;--card-ink:#ffb3c7;--on-accent:#0e1d1a;--ink-on-light:#0e1d1a;--shadow:#000;
+  --text:#e9f4f0;--accent:#ffb3c7;
+  --line:rgba(255,179,199,.22);--tagline:#99b4ad;
+  --grain-opacity:.07;--grain-blend:screen;
+}
+:root[data-theme="nebula"]{
+  color-scheme:dark;
+  --bg:#171428;--surface:#231f3c;--card:#231f3c;--placeholder:#231f3c;
+  --brand:#a8e8ff;--card-ink:#a8e8ff;--on-accent:#171428;--ink-on-light:#171428;--shadow:#000;
+  --text:#ecebfa;--accent:#a8e8ff;
+  --line:rgba(168,232,255,.22);--tagline:#9c97be;
   --grain-opacity:.07;--grain-blend:screen;
 }
 
