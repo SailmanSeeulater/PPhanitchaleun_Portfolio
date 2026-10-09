@@ -108,6 +108,7 @@ ${X} .hero__status{grid-row:4;margin-top:26px;font-size:14.5px;color:var(--muted
 ${X} .hero__status::before{background:var(--text);box-shadow:none;}
 ${X} .hero__actions{grid-row:5;margin-top:28px;}
 ${X} .hero__resume-date{grid-row:6;margin-top:12px;font-size:12.5px;}
+${X} .burn-wrap{grid-column:1;grid-row:7;margin-top:32px;}
 ${X} .btn-primary{
   background:var(--text);color:var(--bg);box-shadow:none;font-weight:500;letter-spacing:0;
   transition:opacity .2s var(--ease);
@@ -175,7 +176,7 @@ ${X} :is(.dock__panel,.ldock__menu,.theme-panel,.skill-bubble){
 @media (max-width:760px){
   ${X} .hero{grid-template-columns:minmax(0,1fr);}
   ${X} .hero__photo{grid-column:1;grid-row:2;aspect-ratio:4/3;margin-bottom:22px;}
-  ${X} :is(.hero__role,.hero__proof,.hero__status,.hero__actions,.hero__resume-date){grid-row:auto;}
+  ${X} :is(.hero__role,.hero__proof,.hero__status,.hero__actions,.hero__resume-date,.burn-wrap){grid-row:auto;}
 }
 
 /* ================= SLIDING (projects on a rail: clean, quiet, modern) ================= */
@@ -414,7 +415,7 @@ ${C}{
 ${C} .site{overflow-x:clip;}
 ${C} .ai-flow{display:none;} /* the chips fly off, so the ship path would float with no context */
 ${C} .burn{
-  margin-top:10px;rotate:-1deg;background:var(--sticker);
+  rotate:-1deg;background:var(--sticker);
   border:1.5px solid var(--edge);border-radius:var(--r);box-shadow:4px 4px 0 var(--pop);
 }
 ${C} .burn__num{font-family:var(--font-display);color:var(--ink);}

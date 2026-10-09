@@ -1685,6 +1685,7 @@ export default function App() {
               <a className="hero__secondary" href="#projects">See the projects</a>
             </div>
             <p className="hero__resume-date">Résumé updated September 29, 2026</p>
+            <AiBurnBox />
           </div>
         </section>
 
@@ -1737,7 +1738,6 @@ export default function App() {
                         ))}
                       </ol>
                     )}
-                    {row.flow && <AiBurnBox />}
                   </div>
                 </div>
               );
@@ -2452,10 +2452,10 @@ html{
 }
 .ai-flow li:last-child{color:var(--text);}
 
-/* tokens vs water box, under the ship path */
-.burn-wrap{flex:0 0 100%;}
+/* tokens vs water box, under the hero copy */
+.burn-wrap{margin-top:26px;}
 .burn{
-  width:fit-content;max-width:100%;margin-top:4px;padding:14px 18px 13px;
+  width:fit-content;max-width:100%;padding:14px 18px 13px;
   background:var(--surface);border:1px solid var(--line);border-radius:16px;
 }
 .burn__stats{display:flex;flex-wrap:wrap;gap:10px 20px;}
