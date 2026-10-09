@@ -1,0 +1,13 @@
+{
+  "tokens": {
+    "input": 61892,
+    "output": 9291917,
+    "cacheWrite": 71619160,
+    "cacheRead": 3308387213,
+    "total": 3389360182
+  },
+  "replies": 9417,
+  "projects": 20,
+  "since": "2026-05-21",
+  "asOf": "2026-10-08"
+}

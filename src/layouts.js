@@ -149,6 +149,9 @@ ${X} .tech__row:first-child{border-top:none;}
 ${X} .tech__row:last-child{border-bottom:1px solid var(--rule);}
 ${X} .tech__label{padding-top:10px;font-size:11.5px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;}
 ${X} .chip{background:transparent;border:1px solid var(--rule);font-size:13px;font-weight:500;}
+${X} .burn{background:transparent;border-color:var(--rule);border-radius:0;}
+${X} .burn__stat + .burn__stat{border-color:var(--rule);}
+${X} .burn__num{font-family:inherit;font-weight:500;letter-spacing:-.02em;}
 ${X} .tech.is-visible .chip:hover{transform:none;border-color:var(--text);}
 ${X} .chip[aria-expanded="true"]{background:var(--text);color:var(--bg);border-color:var(--text);}
 ${X} .contact{
@@ -265,6 +268,7 @@ ${S} .site .project__link:hover{gap:8px;color:var(--text);text-decoration-color:
 ${S} .tech__hint{font-size:14px;}
 ${S} .tech__label{font-size:13px;font-weight:500;}
 ${S} .chip{border-color:var(--rule);font-weight:500;}
+${S} .burn{border-color:var(--rule);}
 ${S} .tech.is-visible .chip:hover{transform:none;border-color:var(--text);}
 ${S} .contact{border:1px solid var(--rule);border-radius:28px;box-shadow:none;}
 ${S} .contact__email{font-weight:500;}
@@ -376,6 +380,9 @@ ${T} .tech__row:last-child{border-bottom:1px dashed var(--line);}
 ${T} .tech__label{color:var(--term);}
 ${T} .tech__label::before{content:"# ";color:var(--muted);}
 ${T} .chip{background:transparent;border:1px solid var(--line);border-radius:3px;}
+${T} .burn{background:transparent;border:1px dashed var(--line);border-radius:3px;}
+${T} .burn__num{font-family:inherit;color:var(--term);}
+${T} .burn__label::before{content:"# ";color:var(--muted);}
 ${T} .chip__icon{background:#e9e9e2;border-radius:2px;}
 ${T} .tech.is-visible .chip:hover{border-color:var(--term);color:var(--term);}
 ${T} .chip[aria-expanded="true"]{background:color-mix(in srgb,var(--term) 16%,transparent);border-color:var(--term);}
@@ -406,6 +413,11 @@ ${C}{
 }
 ${C} .site{overflow-x:clip;}
 ${C} .ai-flow{display:none;} /* the chips fly off, so the ship path would float with no context */
+${C} .burn{
+  margin-top:10px;rotate:-1deg;background:var(--sticker);
+  border:1.5px solid var(--edge);border-radius:var(--r);box-shadow:4px 4px 0 var(--pop);
+}
+${C} .burn__num{font-family:var(--font-display);color:var(--ink);}
 ${C} :is(.nav,.hero,#projects,#experience,#tech,#contact,.footer){font-family:var(--font-body);}
 ${C} .font-swap{animation:fontSwap .45s var(--ease);}
 @keyframes fontSwap{0%{scale:1;}35%{scale:1.012;rotate:.4deg;}100%{scale:1;}}
