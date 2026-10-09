@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import AI_USAGE from "./ai-usage.json";
 import { flushSync } from "react-dom";
 import mordiShot from "./assets/screenshots/mordi-full.webp";
 import lonelyChessShot from "./assets/screenshots/lonely-chess-full.webp";
@@ -223,6 +224,43 @@ const AI_NOTES = {
       ? `${__AI_STATS__.nextixPRs} GitHub issues turned into pull requests: nexTix writes the branch and runs lint and build, then I review and merge.`
       : "Turns a GitHub issue into a pull request: nexTix writes the branch and runs lint and build, then I review and merge.",
 };
+
+// Token totals come from the Claude Code transcripts on my machine (scripts/ai-usage.mjs, refreshed with
+// `npm run usage`). Water is an estimate: Mistral's 2025 lifecycle assessment puts one 400 token Le Chat
+// reply at 45 mL of water, direct and indirect. That rate is applied only to tokens processed fresh
+// (input, cache writes, output); cache reads re-use work already done, so counting them would inflate it.
+const ML_PER_TOKEN = 45 / 400;
+const ML_PER_GALLON = 3785.41;
+
+function AiBurnBox() {
+  const { tokens, since, asOf } = AI_USAGE;
+  const fresh = tokens.input + tokens.output + tokens.cacheWrite;
+  const gallons = (fresh * ML_PER_TOKEN) / ML_PER_GALLON;
+  const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 });
+  const whole = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+  const month = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  return (
+    <div className="burn-wrap">
+      <aside className="burn" aria-label="Claude Code tokens and estimated water use">
+        <div className="burn__stats">
+          <div className="burn__stat">
+            <span className="burn__num">{compact.format(tokens.total)}</span>
+            <span className="burn__label">tokens burnt</span>
+          </div>
+          <div className="burn__stat">
+            <span className="burn__num">{whole.format(gallons)}</span>
+            <span className="burn__label">gallons of water, est.</span>
+          </div>
+        </div>
+        <p className="burn__note">
+          Every Claude Code session on my machine since {month(since)}, as of {month(asOf)}. Water uses Mistral's
+          published 45 mL per 400 token reply on the {compact.format(fresh)} tokens processed fresh; the rest were
+          cache reads.
+        </p>
+      </aside>
+    </div>
+  );
+}
 
 /* ---- Visibility hooks ---- */
 function useInView(options = { threshold: 0.2, rootMargin: "0px 0px -8% 0px" }) {
@@ -1651,7 +1689,8 @@ export default function App() {
               </a>
               <a className="hero__secondary" href="#projects">See the projects</a>
             </div>
-            <p className="hero__resume-date">Résumé updated September 7, 2026</p>
+            <p className="hero__resume-date">Résumé updated September 29, 2026</p>
+            <AiBurnBox />
           </div>
         </section>
 
@@ -2457,6 +2496,19 @@ html{
   transform:rotate(45deg);opacity:.55;
 }
 .ai-flow li:last-child{color:var(--text);}
+
+/* tokens vs water box, under the hero copy */
+.burn-wrap{margin-top:26px;}
+.burn{
+  width:fit-content;max-width:100%;padding:14px 18px 13px;
+  background:var(--surface);border:1px solid var(--line);border-radius:16px;
+}
+.burn__stats{display:flex;flex-wrap:wrap;gap:10px 20px;}
+.burn__stat{display:flex;flex-direction:column;gap:3px;}
+.burn__stat + .burn__stat{padding-left:20px;border-left:1px solid var(--line);}
+.burn__num{font-family:var(--font-display);font-size:26px;line-height:1;letter-spacing:.01em;}
+.burn__label{font-size:12.5px;color:var(--muted);letter-spacing:.02em;}
+.burn__note{margin:10px 0 0;max-width:50ch;font-size:12px;line-height:1.5;color:var(--muted);}
 
 /* ---------- SKILL BUBBLE ---------- */
 .skill-bubble{
