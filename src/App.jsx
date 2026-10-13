@@ -266,8 +266,8 @@ function AiBurnBox() {
    The dot grid is a tiled CSS background, so single dots can't move. Instead a small canvas follows the
    cursor: it paints the page background over a circle of dots and redraws them pulled toward the pointer,
    on the same grid, drift, and beat scale as .bg-dots, so the edge of the circle is invisible. */
-const PULL_RADIUS = 150; // px around the cursor that feels the pull
-const PULL_AMOUNT = 0.16; // how hard dots lean in: 0 is off, 0.3 is noticeable, past 0.5 they bunch up
+const PULL_RADIUS = 88; // px around the cursor that feels the pull
+const PULL_AMOUNT = 0.12; // how hard dots lean in: 0 is off, 0.3 is noticeable, past 0.5 they bunch up
 
 function DotPull() {
   const canvasRef = useRef(null);
