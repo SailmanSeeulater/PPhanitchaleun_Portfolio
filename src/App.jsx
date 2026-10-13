@@ -262,6 +262,161 @@ function AiBurnBox() {
   );
 }
 
+/* ---- Background dots that lean toward the mouse ----
+   The dot grid is a tiled CSS background, so single dots can't move. Instead a small canvas follows the
+   cursor: it paints the page background over a circle of dots and redraws them pulled toward the pointer,
+   on the same grid, drift, and beat scale as .bg-dots, so the edge of the circle is invisible. */
+const PULL_RADIUS = 88; // px around the cursor that feels the pull
+const PULL_AMOUNT = 0.12; // how hard dots lean in: 0 is off, 0.3 is noticeable, past 0.5 they bunch up
+
+function DotPull() {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const fx = canvas?.parentElement;
+    const dots = fx?.querySelector(".bg-dots");
+    if (!dots || prefersReducedMotion() || !window.matchMedia?.("(hover: hover) and (pointer: fine)").matches) return;
+
+    const R = PULL_RADIUS;
+    const PAD = 6;
+    const size = (R + PAD) * 2;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = canvas.height = Math.round(size * dpr);
+    canvas.style.width = canvas.style.height = `${size}px`;
+    const ctx = canvas.getContext("2d");
+
+    const target = { x: 0, y: 0 };
+    const pos = { x: 0, y: 0 };
+    let strength = 0;
+    let want = 0;
+    let raf = 0;
+    let stale = true;
+    let enabled = false;
+    let colors = {};
+
+    // dots only exist in some layouts (Swiss hides them, Terminal and Chaos repaint .bg-dots), so ask the CSS
+    const refresh = () => {
+      const d = getComputedStyle(dots);
+      enabled = d.display !== "none" && d.backgroundImage.includes("radial-gradient");
+      const c = getComputedStyle(canvas);
+      colors = { ink: c.color, accent: c.outlineColor, bg: c.textDecorationColor };
+      stale = false;
+    };
+
+    const stop = () => {
+      cancelAnimationFrame(raf);
+      raf = 0;
+      strength = 0;
+      fx.classList.remove("is-pulling");
+    };
+
+    const frame = () => {
+      raf = 0;
+      if (stale) refresh();
+      if (!enabled) return stop();
+
+      pos.x += (target.x - pos.x) * 0.22;
+      pos.y += (target.y - pos.y) * 0.22;
+      strength += (want - strength) * (want > strength ? 0.1 : 0.07);
+      if (!want && strength < 0.01) return stop();
+
+      // mirror the .bg-dots box: inset -GAP, drift translate(GAP*t, -GAP*t), scale with the beat, origin at center
+      const GAP = 26;
+      const beat = parseFloat(document.documentElement.style.getPropertyValue("--beat")) || 0;
+      const scale = 1 + beat * 0.012;
+      const t = dots.getAnimations?.()[0]?.effect?.getComputedTiming().progress ?? 0;
+      const cx = fx.clientWidth / 2;
+      const cy = fx.clientHeight / 2;
+      const step = GAP * scale;
+      const x0 = cx + scale * (-GAP / 2 + GAP * t - cx);
+      const y0 = cy + scale * (-GAP / 2 - GAP * t - cy);
+
+      const ox = pos.x - R - PAD;
+      const oy = pos.y - R - PAD;
+      canvas.style.transform = `translate3d(${ox}px,${oy}px,0)`;
+      fx.classList.add("is-pulling");
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, size, size);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(R + PAD, R + PAD, R, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.fillStyle = colors.bg;
+      ctx.fillRect(0, 0, size, size);
+
+      const path = new Path2D();
+      const accentPath = new Path2D();
+      const r = 2.3 * scale;
+      const reach = R + 3;
+      for (let i = Math.ceil((pos.x - reach - x0) / step); x0 + i * step <= pos.x + reach; i++) {
+        for (let j = Math.ceil((pos.y - reach - y0) / step); y0 + j * step <= pos.y + reach; j++) {
+          const px = x0 + i * step;
+          const py = y0 + j * step;
+          const vx = pos.x - px;
+          const vy = pos.y - py;
+          const dist = Math.hypot(vx, vy);
+          if (dist > reach) continue;
+          const f = dist < R ? (1 - dist / R) ** 2 * PULL_AMOUNT * strength : 0;
+          const dx = px + vx * f - ox;
+          const dy = py + vy * f - oy;
+          path.moveTo(dx + r, dy);
+          path.arc(dx, dy, r, 0, Math.PI * 2);
+          accentPath.moveTo(dx + r + 0.2, dy);
+          accentPath.arc(dx, dy, r + 0.2, 0, Math.PI * 2);
+        }
+      }
+      ctx.fillStyle = colors.ink;
+      ctx.globalAlpha = 0.09;
+      ctx.fill(path);
+      if (beat > 0.004) {
+        ctx.fillStyle = colors.accent;
+        ctx.globalAlpha = 0.22 * beat * 0.45;
+        ctx.fill(accentPath);
+      }
+      ctx.restore();
+
+      raf = requestAnimationFrame(frame);
+    };
+
+    const onMove = (e) => {
+      if (e.pointerType && e.pointerType !== "mouse") return;
+      target.x = e.clientX;
+      target.y = e.clientY;
+      if (!raf && strength === 0) {
+        pos.x = target.x;
+        pos.y = target.y;
+      }
+      want = 1;
+      if (!raf) raf = requestAnimationFrame(frame);
+    };
+    const onLeave = () => {
+      want = 0;
+    };
+    const onOut = (e) => {
+      if (!e.relatedTarget) onLeave();
+    };
+
+    const observer = new MutationObserver(() => {
+      stale = true;
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-layout", "data-theme"] });
+    window.addEventListener("pointermove", onMove, { passive: true });
+    window.addEventListener("pointerout", onOut);
+    window.addEventListener("blur", onLeave);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerout", onOut);
+      window.removeEventListener("blur", onLeave);
+      stop();
+    };
+  }, []);
+
+  return <canvas ref={canvasRef} className="bg-pull" />;
+}
+
 /* ---- Visibility hooks ---- */
 function useInView(options = { threshold: 0.2, rootMargin: "0px 0px -8% 0px" }) {
   const ref = useRef(null);
@@ -1650,6 +1805,7 @@ export default function App() {
       <style>{CSS + LAYOUT_CSS}</style>
       <div className="bg-fx" aria-hidden="true">
         <div className="bg-dots" />
+        <DotPull />
       </div>
       <div className="bg-grain" aria-hidden="true" />
 
@@ -2235,6 +2391,12 @@ html{
   opacity:calc(var(--beat, 0) * .45);
 }
 @keyframes dotsDrift{to{transform:translate(26px,-26px);}}
+/* colors are read off this element so the canvas gets resolved values for every theme */
+.bg-pull{
+  position:absolute;left:0;top:0;display:none;will-change:transform;
+  color:var(--text);outline-color:var(--accent-fill);text-decoration-color:var(--bg);
+}
+.bg-fx.is-pulling .bg-pull{display:block;}
 .bg-grain{
   inset:0;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
