@@ -590,6 +590,8 @@ function ScrollPreview({ project }) {
           rel="noreferrer"
           tabIndex={-1}
           aria-hidden="true"
+          data-umami-event="project-preview"
+          data-umami-event-project={project.name}
         >
           <div
             ref={frameRef}
