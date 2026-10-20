@@ -644,12 +644,12 @@ function ProjectRow({ project, index }) {
 
         <div className="project__links">
           {project.live && (
-            <a className="project__link" href={project.live} target="_blank" rel="noreferrer">
+            <a className="project__link" href={project.live} target="_blank" rel="noreferrer" data-umami-event="project-live" data-umami-event-project={project.name}>
               Visit {project.demo.domain}
               <ArrowIcon />
             </a>
           )}
-          <a className="project__link project__link--quiet" href={project.repo} target="_blank" rel="noreferrer">
+          <a className="project__link project__link--quiet" href={project.repo} target="_blank" rel="noreferrer" data-umami-event="project-source" data-umami-event-project={project.name}>
             Source on GitHub
             <ArrowIcon />
           </a>
@@ -741,6 +741,7 @@ function SocialButton({ kind, href, label, confirm }) {
       target="_blank"
       rel="noreferrer"
       aria-label={label}
+      data-umami-event={`social-${kind}`}
       onClick={confirm ? onClick : undefined}
       onBlur={confirm ? () => setAsking(false) : undefined}
     >
@@ -1839,7 +1840,7 @@ export default function App() {
             </p>
             <p className="hero__status">Student, open to SWE internships and new grad roles</p>
             <div className="hero__actions">
-              <a className="btn-primary" href="/resume.pdf" download="Perfect_Phanitchaleun_Resume.pdf">
+              <a className="btn-primary" href="/resume.pdf" download="Perfect_Phanitchaleun_Resume.pdf" data-umami-event="resume-download" data-umami-event-location="hero">
                 Download résumé
                 <DownloadIcon />
               </a>
@@ -1910,12 +1911,12 @@ export default function App() {
         <section id="contact" className="section" aria-labelledby="contact-title">
           <div className="contact">
             <h2 id="contact-title" className="contact__heading">Check out my Socials</h2>
-            <a className="contact__email" href="mailto:perfectphanitchaleun@gmail.com">
+            <a className="contact__email" href="mailto:perfectphanitchaleun@gmail.com" data-umami-event="email-click">
               perfectphanitchaleun@gmail.com
             </a>
 
             <div className="contact__actions">
-              <a className="btn-primary" href="/resume.pdf" download="Perfect_Phanitchaleun_Resume.pdf">
+              <a className="btn-primary" href="/resume.pdf" download="Perfect_Phanitchaleun_Resume.pdf" data-umami-event="resume-download" data-umami-event-location="contact">
                 Download résumé
                 <DownloadIcon />
               </a>
