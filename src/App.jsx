@@ -71,7 +71,6 @@ const PROJECTS = [
     summary: "A Windows screen time tracker: a desktop app that records which app has focus, and a local dashboard that shows where the day went.",
     bullets: [
       "Tracked down why my history looked inflated: every stop re-saved all earlier events, **double counting about 3 hours** of real sessions, and a KeyError on stop lost sessions outright. Fixed both, wrote a repair script, and added 26 unit tests.",
-
     ],
     stack: ["Python", "Tkinter", "Pillow", "Flask", "SQLite", "pywin32", "JavaScript"],
     skills: ["HTML5", "CSS3", "SQL", "PostgreSQL", "Git", "GitHub"],
