@@ -6,6 +6,10 @@ import lonelyChessShot from "./assets/screenshots/lonely-chess-full.webp";
 import pdfyierShot from "./assets/screenshots/pdfyier-full.webp";
 import odinsKinShot from "./assets/screenshots/odins-kin-full.webp";
 import nextixShot from "./assets/screenshots/nextix-full.webp";
+import zwansShot from "./assets/screenshots/zwans-full.webp";
+import gitubeShot from "./assets/screenshots/gitube-full.webp";
+import metroNodesShot from "./assets/screenshots/metro-nodes-full.webp";
+import matchaManagerShot from "./assets/screenshots/matcha-manager-full.webp";
 import profilePhoto from "./assets/profile.webp";
 import WebAudioAnalyser from "web-audio-analyser";
 import { TRACKS } from "./tracks";
@@ -51,7 +55,21 @@ const EXPERIENCE = [
 ];
 
 const PROJECTS = [
-    {
+  {
+    name: "Zwans",
+    summary: "A coding agent built from scratch: the model loop, the tools, the permission policy, the sandbox, and the evals that measure every change.",
+    bullets: [
+      "Wrote the agent end to end over the Claude Messages API: the tool loop, file and shell tools, session resume, context compaction, prompt caching, subagents, an MCP client, hooks, and skills. A permission policy splits every Bash command into the simple commands it runs before deciding to run it, ask first, or refuse.",
+      "Built an eval platform of 48 tasks across starter, hard, and prompt injection suites, each checked by hidden tests, with runs compared by 95% confidence intervals from a paired bootstrap. It showed prompt caching **cuts cost by 57%**, and that Zwans passes the same starter suite as Claude Code while costing 12% less per attempt.",
+      "Wrote a Linux sandbox in Rust (namespaces, seccomp, Landlock) that starts a command in **4 ms against 38 ms for docker exec** at the same pass rate, and a FastAPI and Next.js web UI where several browser tabs and terminals share one live session.",
+    ],
+    stack: ["Python", "Claude API", "FastAPI", "WebSockets", "Rust", "Docker", "Next.js", "TypeScript", "MCP"],
+    skills: ["Claude Code", "React", "Bash", "Linux", "Git", "GitHub"],
+    repo: `${GITHUB}/zwans`,
+    // Runs on the local machine only, so there's no live site: the preview is the eval dashboard from `zwans serve`
+    demo: { domain: "127.0.0.1:8765/evals", image: zwansShot, height: 1538 },
+  },
+  {
     name: "nexTix",
     summary: "A ticket board for coding agents: describe a change in one sentence, and a Claude agent works it in an isolated Docker sandbox and opens a pull request.",
     bullets: [
@@ -64,6 +82,20 @@ const PROJECTS = [
     repo: `${GITHUB}/nextix`,
     // Runs locally against a GitHub App, so there's no live site: the preview is the board with demo data
     demo: { domain: "localhost:3000", image: nextixShot, height: 625 },
+  },
+  {
+    name: "gitube",
+    summary: "A tube map of any GitHub repo, and of anyone's life on GitHub. It runs entirely in the browser: no clone, no server, no sign-up.",
+    bullets: [
+      "Paste owner/repo and every branch becomes a line that forks and merges like a metro map, in three layouts (Metro, Organic, Coral). Paste a login instead and their repos become lines through the years, in seven views from a constellation to an htop style monitor.",
+      "Fit a whole repo inside GitHub's **60 requests an hour** limit for visitors without a token: about one compare call per branch, a history walk that stops once every fork point connects, and one GraphQL query per 40 branches when a token is present.",
+      "Covered the graph building, the layouts, and all 26 color themes with **2,802 Vitest tests**, and shipped it as a static site with share links, replay, and PNG export.",
+    ],
+    stack: ["TypeScript", "React", "Vite", "Tailwind CSS", "Canvas", "d3-force", "Octokit", "TanStack Query", "Zustand", "Vitest"],
+    skills: ["JavaScript", "HTML5", "CSS3", "Git", "GitHub"],
+    live: "https://gitube.latesailor.dev",
+    repo: `${GITHUB}/gitube`,
+    demo: { domain: "gitube.latesailor.dev", image: gitubeShot, height: 2103 },
   },
   {
     name: "Mordi",
@@ -93,6 +125,33 @@ const PROJECTS = [
     live: "https://lonelychess.latesailor.dev/",
     repo: `${GITHUB}/Lonely-Chess-CS-420`,
     demo: { domain: "lonelychess.latesailor.dev", image: lonelyChessShot, height: 4884 },
+  },
+  {
+    name: "Metro Nodes",
+    summary: "An Obsidian plugin that draws your vault as a metro map: notes are stations, links are colored lines, and notes where lines meet are interchanges.",
+    bullets: [
+      "Wrote the layout as pure functions that turn notes into stations, lines, lanes, and octilinear routes, with four ways to build the lines: by links, tags, folders, or a frontmatter property.",
+      "Kept the layout, the SVG renderer, and the UI **free of Obsidian's API**, so the same map runs in a plain browser page and I can iterate without reloading the plugin.",
+    ],
+    stack: ["TypeScript", "Obsidian API", "SVG", "esbuild"],
+    skills: ["JavaScript", "CSS3", "Git", "GitHub"],
+    repo: `${GITHUB}/Metro-Nodes`,
+    // An Obsidian plugin, so there's no live site: the preview is the bundled demo vault in the browser harness
+    demo: { domain: "localhost:5178/harness", image: metroNodesShot, height: 625 },
+  },
+  {
+    name: "Matcha Manager",
+    summary: "A pixel art café game in Unity: customers order, you build each drink from an ingredient tree, and you serve it before their patience runs out.",
+    credit: "CS 583 class project",
+    bullets: [
+      "Designed **24 drink recipes** around a drink tree that works like a file browser, with order changes, mumbled orders, hot snacks that burn, and pay tied to how long each customer waited.",
+      "Generated the whole scene from code: an editor script rebuilds it from the art, recipes, and settings, and the drink tree is imported from an Obsidian vault, so a new recipe reaches the game and its recipe book with no hand editing.",
+    ],
+    stack: ["C#", "Unity 6", "Editor Tooling"],
+    skills: ["Git", "GitHub"],
+    repo: `${GITHUB}/MatchaManager`,
+    // A desktop game, so there's no live site: the preview is gameplay, then the 24 finished drinks
+    demo: { domain: "Unity 6 · desktop build", image: matchaManagerShot, height: 1243 },
   },
   {
     name: "pdfyier",
@@ -175,6 +234,8 @@ const TECH = [
       ["Kotlin", "kotlin"],
       ["Python", "python"],
       ["C++", "cplusplus"],
+      ["Rust", "rust"],
+      ["C#", "csharp"],
       ["Bash", "bash"],
     ],
   },
