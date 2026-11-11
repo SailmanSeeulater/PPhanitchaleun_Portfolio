@@ -18,8 +18,19 @@ const AI_STATS = {
   nextixPRs: count('--merges', '--grep=/nextix/issue-'),
 }
 
+// Visitor total at build time, shown when a content blocker stops the browser asking GoatCounter itself.
+// 0 when the request fails, and the footer then shows nothing until the live count arrives.
+async function visitorCount() {
+  try {
+    const res = await fetch('https://latesailor.goatcounter.com/counter/TOTAL.json', { signal: AbortSignal.timeout(5000) })
+    return res.ok ? Number(String((await res.json()).count).replace(/\D/g, '')) || 0 : 0
+  } catch {
+    return 0
+  }
+}
+
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(async () => ({
   plugins: [react()],
-  define: { __AI_STATS__: JSON.stringify(AI_STATS) },
-})
+  define: { __AI_STATS__: JSON.stringify(AI_STATS), __VISITOR_COUNT__: JSON.stringify(await visitorCount()) },
+}))

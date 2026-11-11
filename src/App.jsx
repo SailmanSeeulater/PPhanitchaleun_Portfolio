@@ -20,7 +20,8 @@ import { LAYOUTS, LAYOUT_CSS } from "./layouts";
    Single-file React app with injected CSS. Respects prefers-reduced-motion.
    ========================================================================= */
 
-const DEVICON = "https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons";
+// Devicon SVGs (MIT), copied into public/ so no third-party request stands between the visitor and the icons.
+const DEVICON = "/icons/dev";
 const GITHUB = "https://github.com/SailmanSeeulater";
 
 const rich = (text) =>
@@ -478,6 +479,59 @@ function DotPull() {
   return <canvas ref={canvasRef} className="bg-pull" />;
 }
 
+/* ---- In-page links glide to their section ----
+   Safari's own scroll-behavior:smooth covers a long page in a few frames, so the scroll is driven here
+   and every browser gets the same ease. */
+function useSmoothAnchors() {
+  useEffect(() => {
+    let raf = 0;
+    const stop = () => {
+      cancelAnimationFrame(raf);
+      raf = 0;
+    };
+    const onClick = (e) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const link = e.target.closest?.('a[href^="#"]');
+      const id = link?.getAttribute("href").slice(1);
+      const target = id && document.getElementById(id);
+      if (!target || prefersReducedMotion()) return;
+      e.preventDefault();
+      stop();
+      const root = document.documentElement;
+      const from = window.scrollY;
+      const offset = parseFloat(getComputedStyle(target).scrollMarginTop) || 0;
+      // Measured on every frame: images still loading above the target move it while the page glides.
+      const destination = () =>
+        id === "top"
+          ? 0
+          : Math.max(0, Math.min(target.getBoundingClientRect().top + window.scrollY - offset, root.scrollHeight - window.innerHeight));
+      const duration = Math.min(900, 350 + Math.abs(destination() - from) * 0.12);
+      const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+      let start = 0;
+      const step = (now) => {
+        start ||= now;
+        const t = Math.min(1, (now - start) / duration);
+        window.scrollTo({ top: from + (destination() - from) * ease(t), behavior: "instant" });
+        raf = t < 1 ? requestAnimationFrame(step) : 0;
+      };
+      raf = requestAnimationFrame(step);
+      history.pushState(null, "", `#${id}`);
+      // Keyboard and screen-reader users land in the section, as they would with a plain anchor jump.
+      if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+      target.focus({ preventScroll: true });
+    };
+    // The visitor taking over the scroll always wins.
+    const cancelOn = ["wheel", "touchstart", "keydown"];
+    document.addEventListener("click", onClick);
+    for (const type of cancelOn) window.addEventListener(type, stop, { passive: true });
+    return () => {
+      stop();
+      document.removeEventListener("click", onClick);
+      for (const type of cancelOn) window.removeEventListener(type, stop);
+    };
+  }, []);
+}
+
 /* ---- Visibility hooks ---- */
 function useInView(options = { threshold: 0.2, rootMargin: "0px 0px -8% 0px" }) {
   const ref = useRef(null);
@@ -572,11 +626,10 @@ function TechBadge({ name, slug, delay, active, onSelect }) {
           <span className="chip__fallback">{name.charAt(0)}</span>
         ) : (
           <img
-            src={slug.startsWith("/") ? slug : `${DEVICON}/${slug}/${slug}-original.svg`}
+            src={slug.startsWith("/") ? slug : `${DEVICON}/${slug}.svg`}
             alt=""
             width="16"
             height="16"
-            loading="lazy"
             decoding="async"
             onError={() => setFailed(true)}
           />
@@ -952,7 +1005,8 @@ function useAnalytics() {
 }
 
 function VisitorCount() {
-  const [count, setCount] = useState(null);
+  // Starts from the total read at build time: content blockers stop the live request to GoatCounter.
+  const [count, setCount] = useState(__VISITOR_COUNT__ || null);
 
   useEffect(() => {
     if (!GOATCOUNTER_CODE) return;
@@ -1843,6 +1897,7 @@ export default function App() {
   const skillTriggerRef = useRef(null);
   const [layoutId, selectLayout] = useLayout();
   useAnalytics();
+  useSmoothAnchors();
   useFlyingChips(layoutId === "chaos");
   useFontRoulette(layoutId === "chaos");
   const railRef = useRef(null);
@@ -2357,6 +2412,7 @@ html{
 .site a{color:inherit;text-decoration:none;}
 .site ul{list-style:none;margin:0;padding:0;}
 .site :focus-visible{outline:2px solid var(--accent-fill);outline-offset:3px;border-radius:6px;}
+.site [tabindex="-1"]:focus{outline:none;}
 
 .skip-link{
   position:fixed;left:12px;top:-60px;z-index:200;
