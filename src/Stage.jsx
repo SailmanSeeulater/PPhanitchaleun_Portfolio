@@ -18,6 +18,7 @@ import {
   SoundDock,
   VisitorCount,
 } from "./App.jsx";
+import { NOTES, NOTES_SOURCE } from "./notes";
 
 /* The Showcase site: one screen, no page scroll. The nav picks a view. Projects are browsed one at a time
    (a screenshot window beside its write-up); experience, tech stack and contact each show in full. */
@@ -42,6 +43,7 @@ const VIEWS = [
   { id: "projects", label: "projects" },
   { id: "experience", label: "experience" },
   { id: "stack", label: "tech stack" },
+  { id: "writing", label: "writing" },
   { id: "about", label: "about" },
   { id: "contact", label: "contact" },
 ];
@@ -51,10 +53,13 @@ const VIEWS = [
 const slugOf = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const PROJECT_SLUGS = PROJECTS.map((p) => slugOf(p.name));
 
+// The two views that are browsed one item at a time, and the address slug of each item.
+const LISTS = { projects: PROJECT_SLUGS, writing: NOTES.map((n) => n.slug) };
+
 function readRoute() {
   const [view, item] = window.location.hash.replace(/^#\/?/, "").split("/");
   if (!VIEWS.some((v) => v.id === view)) return { view: "projects", index: null };
-  const index = view === "projects" ? PROJECT_SLUGS.indexOf(item) : -1;
+  const index = LISTS[view] ? LISTS[view].indexOf(item) : -1;
   return { view, index: index === -1 ? null : index };
 }
 
@@ -241,6 +246,53 @@ function AboutFrame() {
   );
 }
 
+function WritingFrame({ note, index }) {
+  return (
+    <article className="stage__panel stage__note" key={note.slug} aria-labelledby="stage-note">
+      <p className="stage__meta">
+        Notes from building Zwans · {index + 1} of {NOTES.length}
+      </p>
+      <h2 id="stage-note" className="stage__title stage__title--lg">
+        {note.title}
+      </h2>
+      <p className="stage__lead">{note.lead}</p>
+      {note.table && (
+        <div className="stage__table">
+          <table>
+            <thead>
+              <tr>
+                {note.table.head.map((h, i) => (
+                  <th key={i} scope="col">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {note.table.rows.map((row) => (
+                <tr key={row[0]}>
+                  {row.map((cell, i) => (i === 0 ? <th key={i} scope="row">{cell}</th> : <td key={i}>{cell}</td>))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <ul className="bullets stage__bullets">
+        {note.points.map((point, i) => (
+          <li key={i}>{rich(point)}</li>
+        ))}
+      </ul>
+      <div className="project__links">
+        <a className="project__link" href={NOTES_SOURCE} target="_blank" rel="noreferrer" data-umami-event="writing-source" data-umami-event-note={note.slug}>
+          Read the full findings on GitHub
+          <ArrowIcon />
+        </a>
+      </div>
+    </article>
+  );
+}
+
 function ContactFrame() {
   return (
     <div className="stage__panel stage__contact">
@@ -264,7 +316,8 @@ function ContactFrame() {
 export default function Stage() {
   const [theme, setTheme] = useStageTheme();
   const [viewId, setViewId] = useState(() => readRoute().view);
-  const [index, setIndex] = useState(() => readRoute().index ?? 0);
+  const [index, setIndex] = useState(() => (readRoute().view === "projects" ? readRoute().index ?? 0 : 0));
+  const [noteIndex, setNoteIndex] = useState(() => (readRoute().view === "writing" ? readRoute().index ?? 0 : 0));
   const lastView = useRef(null);
   const listRef = useRef(null);
   const stageRef = useRef(null);
@@ -326,8 +379,12 @@ export default function Stage() {
     };
   }, []);
 
-  const count = PROJECTS.length;
-  const step = (d) => setIndex((i) => (i + d + count) % count);
+  // Whichever list is on screen (projects or notes) is what the names, arrows and arrow keys act on.
+  const inList = Boolean(LISTS[viewId]);
+  const items = viewId === "writing" ? NOTES.map((n) => n.list) : PROJECTS.map((p) => p.name);
+  const current = viewId === "writing" ? noteIndex : index;
+  const setCurrent = viewId === "writing" ? setNoteIndex : setIndex;
+  const step = (d) => setCurrent((i) => (i + d + items.length) % items.length);
   const goToProject = (i) => {
     setIndex(i);
     setViewId("projects");
@@ -336,7 +393,7 @@ export default function Stage() {
   // Keep the address in step with what is on screen. Changing view adds a history entry; flipping through
   // projects replaces it, so "back" leaves the view instead of rewinding one project at a time.
   useEffect(() => {
-    const target = viewId === "projects" ? `#/projects/${PROJECT_SLUGS[index]}` : `#/${viewId}`;
+    const target = LISTS[viewId] ? `#/${viewId}/${LISTS[viewId][viewId === "writing" ? noteIndex : index]}` : `#/${viewId}`;
     const first = lastView.current === null;
     const untouched = !window.location.hash && viewId === "projects" && index === 0;
     if (!untouched && window.location.hash !== target) {
@@ -344,14 +401,14 @@ export default function Stage() {
       window.history[write](null, "", target);
     }
     lastView.current = viewId;
-  }, [viewId, index]);
+  }, [viewId, index, noteIndex]);
 
   useEffect(() => {
     const sync = () => {
       const route = readRoute();
       lastView.current = route.view;
       setViewId(route.view);
-      if (route.index !== null) setIndex(route.index);
+      if (route.index !== null) (route.view === "writing" ? setNoteIndex : setIndex)(route.index);
     };
     window.addEventListener("popstate", sync);
     window.addEventListener("hashchange", sync);
@@ -363,7 +420,9 @@ export default function Stage() {
 
   // Arrow keys step through the projects from anywhere on the page, except while typing or inside the music panel.
   useEffect(() => {
-    if (viewId !== "projects") return;
+    if (!LISTS[viewId]) return;
+    const length = LISTS[viewId].length;
+    const move = viewId === "writing" ? setNoteIndex : setIndex;
     const onKey = (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.("input,textarea,select,.dock")) return;
       const d = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : 0;
@@ -372,7 +431,7 @@ export default function Stage() {
       // The pointer may still be resting on the name that was clicked: mute hover until it moves again,
       // so the only name that looks selected is the one on screen.
       listRef.current?.setAttribute("data-keys", "");
-      setIndex((i) => (i + d + PROJECTS.length) % PROJECTS.length);
+      move((i) => (i + d + length) % length);
     };
     const onMove = () => listRef.current?.removeAttribute("data-keys");
     window.addEventListener("keydown", onKey);
@@ -389,7 +448,7 @@ export default function Stage() {
     const current = list?.querySelector("[aria-current]");
     if (!list || !current || list.scrollWidth <= list.clientWidth) return;
     list.scrollTo({ left: current.offsetLeft - (list.clientWidth - current.offsetWidth) / 2, behavior: "smooth" });
-  }, [index, viewId]);
+  }, [index, noteIndex, viewId]);
 
   // A sideways swipe on the project flips to the next or previous one.
   const onTouchStart = (e) => {
@@ -399,17 +458,17 @@ export default function Stage() {
   const onTouchEnd = (e) => {
     const from = touch.current;
     touch.current = null;
-    if (!from || viewId !== "projects") return;
+    if (!from || !LISTS[viewId]) return;
     const t = e.changedTouches[0];
     const dx = t.clientX - from.x;
-    if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(t.clientY - from.y) * 1.6) setIndex((i) => (i + (dx < 0 ? 1 : -1) + PROJECTS.length) % PROJECTS.length);
+    if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(t.clientY - from.y) * 1.6) step(dx < 0 ? 1 : -1);
   };
 
   // Keyboard focus follows the selection, so the focus ring never sits on a different name than the highlight.
   useEffect(() => {
     const list = listRef.current;
     if (list?.contains(document.activeElement)) list.querySelector("[aria-current]")?.focus({ preventScroll: true });
-  }, [index]);
+  }, [index, noteIndex]);
 
   return (
     <div className="site stage" ref={stageRef}>
@@ -460,22 +519,22 @@ export default function Stage() {
       </div>
 
       <aside className="stage__side">
-        {viewId === "projects" && (
+        {inList && (
           <>
-            <ol className="stage__list" aria-label="Projects" ref={listRef}>
-              {PROJECTS.map((p, i) => (
-                <li key={p.name}>
-                  <button type="button" aria-current={i === index ? "true" : undefined} onClick={() => setIndex(i)} data-umami-event="project-preview" data-umami-event-project={p.name}>
-                    {p.name}
+            <ol className="stage__list" aria-label={viewId === "writing" ? "Notes" : "Projects"} ref={listRef}>
+              {items.map((name, i) => (
+                <li key={name}>
+                  <button type="button" aria-current={i === current ? "true" : undefined} onClick={() => setCurrent(i)} data-umami-event={`${viewId}-pick`} data-umami-event-item={name}>
+                    {name}
                   </button>
                 </li>
               ))}
             </ol>
             <div className="stage__ctl">
-              <button type="button" onClick={() => step(-1)} aria-label="Previous project">
+              <button type="button" onClick={() => step(-1)} aria-label="Previous">
                 <ArrowIcon />
               </button>
-              <button type="button" onClick={() => step(1)} aria-label="Next project">
+              <button type="button" onClick={() => step(1)} aria-label="Next">
                 <ArrowIcon />
               </button>
               <span className="stage__hint">or use the arrow keys</span>
@@ -496,6 +555,7 @@ export default function Stage() {
         {viewId === "projects" && <ProjectFrame project={PROJECTS[index]} index={index} />}
         {viewId === "experience" && <ExperienceFrame />}
         {viewId === "stack" && <StackFrame goToProject={goToProject} />}
+        {viewId === "writing" && <WritingFrame note={NOTES[noteIndex]} index={noteIndex} />}
         {viewId === "about" && <AboutFrame />}
         {viewId === "contact" && <ContactFrame />}
       </main>
@@ -699,6 +759,15 @@ const STAGE_CSS = `
 @keyframes screenOn{0%,46%{opacity:0;}64%,100%{opacity:1;}}
 @keyframes deckOut{0%,58%{opacity:1;}90%,100%{opacity:0;}}
 @keyframes introIn{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:none;}}
+
+/* writing: one note, with its table of numbers */
+.stage__note .stage__lead{max-width:44em;line-height:1.5;}
+.stage__note .stage__bullets{max-width:52em;}
+.stage__table{margin-top:22px;overflow-x:auto;}
+.stage__table table{border-collapse:collapse;min-width:min(100%,560px);font-variant-numeric:tabular-nums;}
+.stage__table :is(th,td){padding:9px 22px 9px 0;text-align:left;border-bottom:1px solid var(--line);font-size:15px;font-weight:400;white-space:nowrap;}
+.stage__table thead th{font-family:var(--mono);font-size:10.5px;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);border-bottom-color:var(--text);}
+.stage__table td{font-family:var(--font-display);font-size:20px;letter-spacing:-.01em;}
 
 /* experience: every role at once */
 .stage__cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:clamp(12px,1.4vw,20px);overflow-y:auto;scrollbar-width:thin;}
