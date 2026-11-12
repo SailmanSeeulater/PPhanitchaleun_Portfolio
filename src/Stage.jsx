@@ -81,7 +81,7 @@ function useStageTheme() {
 }
 
 /* Two windows: the screenshot in a laptop-style bezel, and the write-up beside it. */
-function ProjectFrame({ project, index }) {
+function ProjectFrame({ project }) {
   // A deployed project's screen is a link to the live app; the rest are plain pictures.
   const Screen = project.live ? "a" : "div";
   const screenLink = project.live
@@ -103,18 +103,10 @@ function ProjectFrame({ project, index }) {
         <span className="stage__deck" aria-hidden="true" />
       </figure>
       <article className="stage__panel stage__about" key={project.name} aria-labelledby="stage-project">
-        <p className="stage__meta">
-          {project.kind} · {index + 1} of {PROJECTS.length}
-        </p>
+        <p className="stage__meta">{project.kind}</p>
         <h2 id="stage-project" className="stage__title">
           {project.name}
         </h2>
-        {project.stat && (
-          <p className="stage__stat">
-            <b>{project.stat[0]}</b>
-            <span>{project.stat[1]}</span>
-          </p>
-        )}
         <ProjectNotes project={project} />
       </article>
     </div>
@@ -478,7 +470,6 @@ export default function Stage() {
               <button type="button" onClick={() => step(1)} aria-label="Next project">
                 <ArrowIcon />
               </button>
-              <span className="stage__hint">or use the arrow keys</span>
             </div>
           </>
         )}
@@ -493,7 +484,7 @@ export default function Stage() {
       </aside>
 
       <main id="top" className="stage__main" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-        {viewId === "projects" && <ProjectFrame project={PROJECTS[index]} index={index} />}
+        {viewId === "projects" && <ProjectFrame project={PROJECTS[index]} />}
         {viewId === "experience" && <ExperienceFrame />}
         {viewId === "stack" && <StackFrame goToProject={goToProject} />}
         {viewId === "about" && <AboutFrame />}
@@ -588,9 +579,7 @@ const STAGE_CSS = `
 }
 .stage__list:not([data-keys]) button:hover{color:color-mix(in srgb,var(--text) 62%,var(--bg));}
 .stage__list button[aria-current]{color:var(--text);}
-.stage__ctl{display:flex;align-items:center;gap:8px;margin-top:20px;}
-.stage__hint{margin-left:4px;font-family:var(--mono);font-size:9px;letter-spacing:.03em;text-transform:uppercase;line-height:1.4;color:var(--muted);max-width:9em;}
-@media (hover:none){.stage__hint{display:none;}}
+.stage__ctl{display:flex;gap:8px;margin-top:20px;}
 .stage__ctl button{
   display:grid;place-items:center;width:40px;height:40px;padding:0;border-radius:50%;cursor:pointer;
   border:1px solid color-mix(in srgb,var(--text) 30%,transparent);background:var(--surface);color:var(--text);
@@ -659,12 +648,6 @@ const STAGE_CSS = `
   position:absolute;right:12px;bottom:12px;padding:6px 10px;border-radius:999px;background:rgba(10,10,10,.82);color:#fff;
   font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;
 }
-.stage__stat{
-  display:flex;align-items:baseline;gap:12px;margin:18px 0 0;padding:12px 0;
-  border-top:1px solid var(--line);border-bottom:1px solid var(--line);
-}
-.stage__stat b{font-family:var(--font-display);font-weight:400;font-size:clamp(30px,3vw,44px);line-height:1;letter-spacing:-.015em;}
-.stage__stat span{font-family:var(--mono);font-size:10.5px;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);}
 .stage__about .notes__summary{margin:16px 0 0;font-size:clamp(16px,1.3vw,18.5px);line-height:1.4;}
 .stage__about .notes__credit{margin:10px 0 0;font-family:var(--mono);font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);}
 .stage__about .bullets{margin-top:18px;}
@@ -706,9 +689,9 @@ const STAGE_CSS = `
 
 /* tech stack: every group at once */
 .stage__stack{display:flex;flex-direction:column;}
-.stage__groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr));gap:clamp(20px,2.4vw,34px) clamp(20px,2.6vw,40px);}
+.stage__groups{flex:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr));gap:clamp(20px,2.4vw,34px) clamp(20px,2.6vw,40px);}
 .stage__group{margin:0;font-family:var(--font-display);font-size:clamp(22px,2vw,30px);font-weight:400;letter-spacing:-.015em;line-height:1;}
-.stage__chips{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px;}
+.stage .stage__chips{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px;}
 .stage__chips button{
   display:inline-flex;align-items:center;gap:8px;padding:7px 12px 7px 8px;border-radius:999px;cursor:pointer;
   border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit;font-size:14px;
@@ -717,7 +700,7 @@ const STAGE_CSS = `
 .stage__chips button[aria-pressed="true"]{background:var(--text);color:var(--bg);border-color:var(--text);}
 .stage__chips img{display:block;}
 .stage__chips i{display:grid;place-items:center;width:16px;height:16px;border-radius:50%;font-style:normal;font-family:var(--mono);font-size:10px;border:1px solid currentColor;}
-.stage__used{margin-top:auto;padding-top:26px;min-height:92px;}
+.stage__used{flex:none;margin-top:auto;padding-top:26px;min-height:92px;}
 .stage__used ul{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:4px 22px;}
 .stage__used :is(button,a){
   display:inline-flex;align-items:center;gap:6px;padding:0;border:none;background:none;cursor:pointer;color:var(--text);
@@ -727,16 +710,13 @@ const STAGE_CSS = `
 
 /* contact: every link at once */
 .stage__contact{display:flex;flex-direction:column;}
-.stage__links{list-style:none;margin:auto 0 0;padding:clamp(24px,4vw,56px) 0 0;}
-.stage__links li{
-  display:grid;grid-template-columns:minmax(90px,150px) minmax(0,1fr);align-items:baseline;gap:12px;
-  padding:clamp(10px,1.3vw,16px) 0;border-top:1px solid var(--line);
-}
+.stage .stage__links{list-style:none;margin:clamp(30px,4.4vw,60px) 0 0;padding:0;display:flex;flex-direction:column;gap:clamp(8px,1vw,12px);}
+.stage__links li{display:grid;grid-template-columns:minmax(80px,120px) minmax(0,1fr);align-items:baseline;gap:12px;}
 .stage__links a{
-  display:inline-flex;align-items:center;gap:8px;justify-self:start;max-width:100%;overflow-wrap:anywhere;
-  font-family:var(--font-display);font-size:clamp(18px,2.1vw,30px);font-weight:400;letter-spacing:-.015em;
+  display:inline-flex;align-items:center;gap:7px;justify-self:start;max-width:100%;overflow-wrap:anywhere;
+  font-size:clamp(16px,1.35vw,19px);
 }
-.stage__links a:hover{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:6px;}
+.stage__links a:hover{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px;}
 
 /* short windows: tighten the header so the frame keeps its height */
 @media (max-height:760px){

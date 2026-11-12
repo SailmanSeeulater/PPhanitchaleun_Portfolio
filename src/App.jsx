@@ -58,7 +58,6 @@ const EXPERIENCE = [
 const PROJECTS = [
   {
     name: "Zwans",
-    stat: ["57%", "lower cost from prompt caching"],
     kind: "Agent harness",
     summary: "A coding agent built from scratch: the model loop, the tools, the permission policy, the sandbox, and the evals that measure every change.",
     bullets: [
@@ -74,7 +73,6 @@ const PROJECTS = [
   },
   {
     name: "nexTix",
-    stat: ["1,000", "automated tests, about"],
     kind: "Agent platform",
     summary: "A ticket board for coding agents: describe a change in one sentence, and a Claude agent works it in an isolated Docker sandbox and opens a pull request.",
     bullets: [
@@ -90,7 +88,6 @@ const PROJECTS = [
   },
   {
     name: "gitube",
-    stat: ["2,802", "Vitest tests"],
     kind: "Data visualisation",
     summary: "A tube map of any GitHub repo, and of anyone's life on GitHub. It runs entirely in the browser: no clone, no server, no sign-up.",
     bullets: [
@@ -106,7 +103,6 @@ const PROJECTS = [
   },
   {
     name: "Mordi",
-    stat: ["9", "defects caught before deploy"],
     kind: "Web app",
     summary: "A goal tracker with daily logs and weekly mood reports, self-hosted and shipped through CI.",
     bullets: [
@@ -122,7 +118,6 @@ const PROJECTS = [
   },
   {
     name: "Lonely Chess",
-    stat: ["2,669", "chess moves to run FizzBuzz"],
     kind: "Language",
     summary: "A programming language where a legal game of chess is the source code.",
     credit: "Built with Nicolaus ReyasBautista · CS 420 final project",
@@ -139,7 +134,6 @@ const PROJECTS = [
   },
   {
     name: "Metro Nodes",
-    stat: ["4", "ways to draw the lines"],
     kind: "Obsidian plugin",
     summary: "An Obsidian plugin that draws your vault as a metro map: notes are stations, links are colored lines, and notes where lines meet are interchanges.",
     bullets: [
@@ -154,7 +148,6 @@ const PROJECTS = [
   },
   {
     name: "Matcha Manager",
-    stat: ["24", "drink recipes"],
     kind: "Game",
     summary: "A pixel art café game in Unity: customers order, you build each drink from an ingredient tree, and you serve it before their patience runs out.",
     credit: "CS 583 class project",
@@ -170,7 +163,6 @@ const PROJECTS = [
   },
   {
     name: "pdfyier",
-    stat: ["0", "uploads kept on disk"],
     kind: "Tool",
     summary: "Turn a batch of images into one PDF without your files ever touching a disk.",
     bullets: [
@@ -185,7 +177,6 @@ const PROJECTS = [
   },
   {
     name: "Odin's Kin",
-    stat: ["26", "unit tests behind the fix"],
     kind: "Desktop app",
     summary: "A Windows screen time tracker: a desktop app that records which app has focus, and a local dashboard that shows where the day went.",
     bullets: [
