@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
+  AI_USAGE,
   PROJECTS,
   EXPERIENCE,
   TECH,
@@ -202,12 +203,16 @@ function StackFrame({ goToProject }) {
   );
 }
 
+const monthOf = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+const TOKENS_BURNT = `${new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 }).format(AI_USAGE.tokens.total)} Claude Code tokens, ${monthOf(AI_USAGE.since)} to ${monthOf(AI_USAGE.asOf)}`;
+
 const ABOUT_FACTS = [
   ["Based in", "San Diego, California"],
   ["From", "Laos"],
   ["Studying", "B.S. Computer Science, San Diego State University, expected June 2027"],
   ["Working", "Founding engineer, stealth startup"],
   ["Off the clock", "Making music, dreaming about pottery"],
+  ["Burnt so far", TOKENS_BURNT],
 ];
 
 function AboutFrame() {
@@ -263,6 +268,7 @@ export default function Stage() {
   const lastView = useRef(null);
   const listRef = useRef(null);
   const stageRef = useRef(null);
+  const touch = useRef(null);
   useAnalytics();
 
   // First-visit intro: a closed laptop opens in the middle of the page, lights up on the first project,
@@ -377,6 +383,28 @@ export default function Stage() {
     };
   }, [viewId]);
 
+  // On phones the names sit in a strip above the laptop: keep the current one in view.
+  useEffect(() => {
+    const list = listRef.current;
+    const current = list?.querySelector("[aria-current]");
+    if (!list || !current || list.scrollWidth <= list.clientWidth) return;
+    list.scrollTo({ left: current.offsetLeft - (list.clientWidth - current.offsetWidth) / 2, behavior: "smooth" });
+  }, [index, viewId]);
+
+  // A sideways swipe on the project flips to the next or previous one.
+  const onTouchStart = (e) => {
+    const t = e.touches[0];
+    touch.current = { x: t.clientX, y: t.clientY };
+  };
+  const onTouchEnd = (e) => {
+    const from = touch.current;
+    touch.current = null;
+    if (!from || viewId !== "projects") return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - from.x;
+    if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(t.clientY - from.y) * 1.6) setIndex((i) => (i + (dx < 0 ? 1 : -1) + PROJECTS.length) % PROJECTS.length);
+  };
+
   // Keyboard focus follows the selection, so the focus ring never sits on a different name than the highlight.
   useEffect(() => {
     const list = listRef.current;
@@ -464,7 +492,7 @@ export default function Stage() {
         </p>
       </aside>
 
-      <main id="top" className="stage__main">
+      <main id="top" className="stage__main" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
         {viewId === "projects" && <ProjectFrame project={PROJECTS[index]} index={index} />}
         {viewId === "experience" && <ExperienceFrame />}
         {viewId === "stack" && <StackFrame goToProject={goToProject} />}
@@ -725,8 +753,19 @@ const STAGE_CSS = `
 /* narrow windows: the page stacks and scrolls like any phone page */
 @media (max-width:760px){
   .stage{height:auto;min-height:100svh;overflow:visible;display:flex;flex-direction:column;}
-  .stage__side{order:3;}
-  .stage__main{flex:none;}
+  .stage__main{flex:none;order:3;}
+  /* the column dissolves: names become a strip above the laptop, résumé and footer drop to the end */
+  .stage__side{display:contents;}
+  .stage__list{
+    order:2;display:flex;gap:18px;overflow-x:auto;padding:0 var(--pad) 14px;scrollbar-width:none;
+    scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;
+  }
+  .stage__list::-webkit-scrollbar{display:none;}
+  .stage__list li{flex:none;scroll-snap-align:center;}
+  .stage__list button{font-size:22px;white-space:nowrap;padding:6px 0;}
+  .stage__ctl{display:none;}
+  .stage__resume{order:4;margin:0 var(--pad);}
+  .stage__foot{order:5;margin:12px var(--pad) 28px;}
   .stage__top{flex-direction:column-reverse;gap:18px;padding:14px var(--pad) 18px;}
   .stage__nav{align-self:stretch;justify-content:space-between;align-items:center;}
   .stage__nav nav{flex-direction:row;flex-wrap:wrap;gap:4px 14px;}
@@ -741,7 +780,6 @@ const STAGE_CSS = `
   .stage__links li{grid-template-columns:minmax(0,1fr);gap:2px;}
   .stage__letter{grid-template-columns:minmax(0,1fr);}
   .stage__facts{padding:20px 0 0;border-left:none;border-top:1px solid var(--line);}
-  .stage__side{padding:0 var(--pad) 28px;}
 }
 @media (prefers-reduced-motion:reduce){
   .stage__screen img,.stage__panel,.stage .dock__tab{animation:none !important;}

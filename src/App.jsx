@@ -3215,5 +3215,5 @@ html{
 
 // Shared with the single-screen Showcase site in Stage.jsx. This file is now the archived site, served at /archive/.
 // eslint-disable-next-line react/only-export-components
-export { PROJECTS, EXPERIENCE, TECH, SKILL_SOURCES, GITHUB, SC_PROFILE, DEVICON, RESUME, CSS as BASE_CSS, profilePhoto, rich, useAnalytics };
+export { AI_USAGE, PROJECTS, EXPERIENCE, TECH, SKILL_SOURCES, GITHUB, SC_PROFILE, DEVICON, RESUME, CSS as BASE_CSS, profilePhoto, rich, useAnalytics };
 export { ArrowIcon, DownloadIcon, ProjectNotes, SoundDock, VisitorCount };
