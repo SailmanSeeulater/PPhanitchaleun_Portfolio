@@ -81,14 +81,23 @@ function useStageTheme() {
 
 /* Two windows: the screenshot in a laptop-style bezel, and the write-up beside it. */
 function ProjectFrame({ project, index }) {
+  // A deployed project's screen is a link to the live app; the rest are plain pictures.
+  const Screen = project.live ? "a" : "div";
+  const screenLink = project.live
+    ? { href: project.live, target: "_blank", rel: "noreferrer", "aria-label": `Open ${project.name} live`, "data-umami-event": "project-live", "data-umami-event-project": project.name }
+    : {};
   return (
     <div className="stage__pair">
       <figure className="stage__mac">
         <div className="stage__lid">
-          <div className="stage__screen">
+          <Screen className="stage__screen" style={{ "--pan": `${Math.max(4, project.demo.height / 240).toFixed(1)}s` }} {...screenLink}>
             <img key={project.name} src={project.demo.image} alt={`${project.name} screenshot`} />
-            <figcaption className="stage__tag">{project.demo.domain}</figcaption>
-          </div>
+            <figcaption className="stage__tag">
+              {project.live ? "Open " : ""}
+              {project.demo.domain}
+              {project.live && <ArrowIcon />}
+            </figcaption>
+          </Screen>
         </div>
         <span className="stage__deck" aria-hidden="true" />
       </figure>
@@ -99,6 +108,12 @@ function ProjectFrame({ project, index }) {
         <h2 id="stage-project" className="stage__title">
           {project.name}
         </h2>
+        {project.stat && (
+          <p className="stage__stat">
+            <b>{project.stat[0]}</b>
+            <span>{project.stat[1]}</span>
+          </p>
+        )}
         <ProjectNotes project={project} />
       </article>
     </div>
@@ -435,6 +450,7 @@ export default function Stage() {
               <button type="button" onClick={() => step(1)} aria-label="Next project">
                 <ArrowIcon />
               </button>
+              <span className="stage__hint">or use the arrow keys</span>
             </div>
           </>
         )}
@@ -544,7 +560,9 @@ const STAGE_CSS = `
 }
 .stage__list:not([data-keys]) button:hover{color:color-mix(in srgb,var(--text) 62%,var(--bg));}
 .stage__list button[aria-current]{color:var(--text);}
-.stage__ctl{display:flex;gap:8px;margin-top:20px;}
+.stage__ctl{display:flex;align-items:center;gap:8px;margin-top:20px;}
+.stage__hint{margin-left:4px;font-family:var(--mono);font-size:9px;letter-spacing:.03em;text-transform:uppercase;line-height:1.4;color:var(--muted);max-width:9em;}
+@media (hover:none){.stage__hint{display:none;}}
 .stage__ctl button{
   display:grid;place-items:center;width:40px;height:40px;padding:0;border-radius:50%;cursor:pointer;
   border:1px solid color-mix(in srgb,var(--text) 30%,transparent);background:var(--surface);color:var(--text);
@@ -595,12 +613,30 @@ const STAGE_CSS = `
 }
 .stage__lid::before{content:"";position:absolute;z-index:1;top:3.5px;left:50%;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:#3a3a3d;}
 .stage__deck{display:none;}
-.stage__screen{position:relative;height:100%;border-radius:8px;overflow:hidden;background:#161617;isolation:isolate;}
-.stage__screen img{display:block;width:100%;height:100%;object-fit:cover;object-position:top;animation:stageIn .6s var(--ease);}
+.stage__screen{display:block;position:relative;height:100%;border-radius:8px;overflow:hidden;background:#161617;isolation:isolate;container-type:size;}
+/* the screenshot keeps its full height and slides up while the pointer is on the screen, so the whole page gets seen */
+.stage__screen img{
+  display:block;width:100%;height:auto;min-height:100cqh;object-fit:cover;object-position:top;
+  translate:0 0;transition:translate 1.2s var(--ease);animation:stageIn .6s var(--ease);
+}
+@media (hover:hover){
+  .stage__screen:is(:hover,:focus-visible) img{translate:0 min(0px,calc(100cqh - 100%));transition:translate var(--pan,7s) cubic-bezier(.37,0,.63,1);}
+}
+@media (hover:none){
+  .stage__screen img{animation:stageIn .6s var(--ease),panLoop calc(var(--pan,7s) * 2.4) cubic-bezier(.37,0,.63,1) 1.2s infinite alternate;}
+}
+@keyframes panLoop{0%,12%{translate:0 0;}88%,100%{translate:0 min(0px,calc(100cqh - 100%));}}
 .stage__tag{
+  display:inline-flex;align-items:center;gap:6px;
   position:absolute;right:12px;bottom:12px;padding:6px 10px;border-radius:999px;background:rgba(10,10,10,.82);color:#fff;
   font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;
 }
+.stage__stat{
+  display:flex;align-items:baseline;gap:12px;margin:18px 0 0;padding:12px 0;
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+}
+.stage__stat b{font-family:var(--font-display);font-weight:400;font-size:clamp(30px,3vw,44px);line-height:1;letter-spacing:-.015em;}
+.stage__stat span{font-family:var(--mono);font-size:10.5px;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);}
 .stage__about .notes__summary{margin:16px 0 0;font-size:clamp(16px,1.3vw,18.5px);line-height:1.4;}
 .stage__about .notes__credit{margin:10px 0 0;font-family:var(--mono);font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);}
 .stage__about .bullets{margin-top:18px;}
@@ -709,5 +745,6 @@ const STAGE_CSS = `
 }
 @media (prefers-reduced-motion:reduce){
   .stage__screen img,.stage__panel,.stage .dock__tab{animation:none !important;}
+  .stage__screen img{transition:none !important;translate:0 0 !important;}
 }
 `;
