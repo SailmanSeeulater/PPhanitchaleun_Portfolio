@@ -47,17 +47,18 @@ const EXPERIENCE = [
     about: "a moderated community platform for girls' flag football",
     meta: ["Jul to Aug 2026", "Oceanside, CA", "Remote"],
     bullets: [
-      "Fixed **2 pre-launch Stripe billing defects**: a webhook path that charged a customer without recording the transaction, and a price lookup that billed the wrong tier. Proved each fix by reintroducing the bug and watching the new test fail.",
-      "Built a **COPPA-compliant parent approval sign-in**: a guardian authorizes their child's account, and unanswered requests expire. It extends the existing JWT layer instead of forking a second auth path.",
-      "Containerized production with Docker Compose and nginx, and automated **nightly PostgreSQL backups** with compression, retention pruning, and integrity checks, so a failing dump surfaces before an outage does.",
+      "Audited the Stripe integration before launch and fixed **2 billing defects**, a webhook path that could charge without recording the transaction and a price lookup that billed the wrong tier, each proven by a regression test.",
+      "Built a **COPPA parent-approval sign-in flow** on the existing JWT layer, sharing token rules with password sign-in.",
+      "Automated **nightly PostgreSQL backups** with integrity checks and containerized the app behind nginx.",
     ],
-    stack: ["Stripe", "JWT", "PostgreSQL", "Docker Compose", "nginx"],
+    stack: ["Stripe", "JWT", "PostgreSQL", "Docker", "nginx"],
   },
 ];
 
 const PROJECTS = [
   {
     name: "Zwans",
+    kind: "Agent harness",
     summary: "A coding agent built from scratch: the model loop, the tools, the permission policy, the sandbox, and the evals that measure every change.",
     bullets: [
       "Wrote the agent end to end over the Claude Messages API: the tool loop, file and shell tools, session resume, context compaction, prompt caching, subagents, an MCP client, hooks, and skills. A permission policy splits every Bash command into the simple commands it runs before deciding to run it, ask first, or refuse.",
@@ -72,6 +73,7 @@ const PROJECTS = [
   },
   {
     name: "nexTix",
+    kind: "Agent platform",
     summary: "A ticket board for coding agents: describe a change in one sentence, and a Claude agent works it in an isolated Docker sandbox and opens a pull request.",
     bullets: [
       "Built the pipeline end to end: Claude triages a one line request into a GitHub issue, a Celery worker runs Claude Code in a locked down Docker container, and the board streams the agent's work live over SSE until the pull request opens. Review comments on the PR start a follow up run on the same branch.",
@@ -86,6 +88,7 @@ const PROJECTS = [
   },
   {
     name: "gitube",
+    kind: "Data visualisation",
     summary: "A tube map of any GitHub repo, and of anyone's life on GitHub. It runs entirely in the browser: no clone, no server, no sign-up.",
     bullets: [
       "Paste owner/repo and every branch becomes a line that forks and merges like a metro map, in three layouts (Metro, Organic, Coral). Paste a login instead and their repos become lines through the years, in seven views from a constellation to an htop style monitor.",
@@ -100,6 +103,7 @@ const PROJECTS = [
   },
   {
     name: "Mordi",
+    kind: "Web app",
     summary: "A goal tracker with daily logs and weekly mood reports, self-hosted and shipped through CI.",
     bullets: [
       "Audited the API and found a JWT signing secret and database password committed **in plaintext since the first commit**. Rotated both, closed an account enumeration hole in login, and added Redis backed rate limiting.",
@@ -114,6 +118,7 @@ const PROJECTS = [
   },
   {
     name: "Lonely Chess",
+    kind: "Language",
     summary: "A programming language where a legal game of chess is the source code.",
     credit: "Built with Nicolaus ReyasBautista · CS 420 final project",
     bullets: [
@@ -129,6 +134,7 @@ const PROJECTS = [
   },
   {
     name: "Metro Nodes",
+    kind: "Obsidian plugin",
     summary: "An Obsidian plugin that draws your vault as a metro map: notes are stations, links are colored lines, and notes where lines meet are interchanges.",
     bullets: [
       "Wrote the layout as pure functions that turn notes into stations, lines, lanes, and octilinear routes, with four ways to build the lines: by links, tags, folders, or a frontmatter property.",
@@ -142,6 +148,7 @@ const PROJECTS = [
   },
   {
     name: "Matcha Manager",
+    kind: "Game",
     summary: "A pixel art café game in Unity: customers order, you build each drink from an ingredient tree, and you serve it before their patience runs out.",
     credit: "CS 583 class project",
     bullets: [
@@ -156,6 +163,7 @@ const PROJECTS = [
   },
   {
     name: "pdfyier",
+    kind: "Tool",
     summary: "Turn a batch of images into one PDF without your files ever touching a disk.",
     bullets: [
       "Drop or select a batch of images (JPG, PNG, WEBP, BMP, TIFF, GIF), drag to reorder pages, then name and download one merged PDF.",
@@ -169,6 +177,7 @@ const PROJECTS = [
   },
   {
     name: "Odin's Kin",
+    kind: "Desktop app",
     summary: "A Windows screen time tracker: a desktop app that records which app has focus, and a local dashboard that shows where the day went.",
     bullets: [
       "Tracked down why my history looked inflated: every stop re-saved all earlier events, **double counting about 3 hours** of real sessions, and a KeyError on stop lost sessions outright. Fixed both, wrote a repair script, and added 26 unit tests.",
@@ -739,7 +748,7 @@ const ArrowIcon = () => (
 function ProjectRow({ project, index }) {
   const [ref, inView] = useInView();
   return (
-    <article ref={ref} className={`project ${inView ? "is-visible" : ""}`} aria-labelledby={`proj-${index}`}>
+    <article ref={ref} className={`project ${inView ? "is-visible" : ""}`} aria-labelledby={`proj-${index}`} data-live={project.live ? "" : undefined}>
       <div className="project__text">
         <h3 id={`proj-${index}`} className="project__name">
           {project.name}
@@ -1330,6 +1339,17 @@ function useTheme() {
     }
   });
 
+  // Until a theme is picked by hand, layouts with a signature palette (Sleeve, Celadon) keep their own colors.
+  useLayoutEffect(() => {
+    let picked = false;
+    try {
+      picked = localStorage.getItem("themePicked") === "1";
+    } catch {
+      /* storage unavailable */
+    }
+    document.documentElement.toggleAttribute("data-theme-auto", !picked);
+  }, []);
+
   useLayoutEffect(() => {
     const id = THEMES[index].id;
     document.documentElement.dataset.theme = id;
@@ -1341,8 +1361,18 @@ function useTheme() {
   }, [index]);
 
   const select = (i) => {
-    if (i === index) return;
-    const apply = () => flushSync(() => setIndex(i));
+    const root = document.documentElement;
+    const wasAuto = root.hasAttribute("data-theme-auto");
+    try {
+      localStorage.setItem("themePicked", "1");
+    } catch {
+      /* storage unavailable */
+    }
+    if (i === index && !wasAuto) return;
+    const apply = () => {
+      root.removeAttribute("data-theme-auto");
+      flushSync(() => setIndex(i));
+    };
     if (!document.startViewTransition || prefersReducedMotion()) apply();
     else document.startViewTransition(apply).ready.catch(() => {});
   };
@@ -1800,6 +1830,31 @@ function LayoutThumb({ id }) {
         <rect x="21" y="24" width="13" height="4" opacity=".35" />
       </svg>
     );
+  if (id === "device")
+    return (
+      <svg {...common} fill="currentColor">
+        <rect x="2" y="3" width="15" height="24" rx="2" />
+        {[0, 1, 2].flatMap((r) => [0, 1, 2].map((c) => <rect key={`${r}${c}`} x={20 + c * 8} y={3 + r * 8.5} width="6" height="7" rx="1.5" opacity={r === 0 && c === 0 ? 1 : 0.45} />))}
+      </svg>
+    );
+  if (id === "sleeve")
+    return (
+      <svg {...common} fill="currentColor">
+        <rect x="2" y="3" width="30" height="5" />
+        <rect x="2" y="13" width="11" height="11" />
+        <rect x="16" y="13" width="11" height="11" opacity=".55" />
+        <rect x="30" y="13" width="11" height="11" opacity=".55" />
+        <rect x="2" y="26" width="7" height="2" opacity=".5" />
+      </svg>
+    );
+  if (id === "celadon")
+    return (
+      <svg {...common} fill="currentColor">
+        <rect x="3" y="4" width="18" height="22" rx="4" />
+        <rect x="24" y="4" width="18" height="22" rx="4" opacity=".45" />
+        <rect x="27" y="20" width="12" height="3" rx="1.5" opacity=".9" />
+      </svg>
+    );
   if (id === "terminal")
     return (
       <svg {...common} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1850,7 +1905,7 @@ function LayoutDock({ current, select }) {
     <div className="ldock" ref={rootRef}>
       {open && (
         <div className="ldock__menu" id="layout-menu" ref={menuRef} role="group" aria-label="Page layouts">
-          <p className="ldock__hint">Same content, five ways to read it.</p>
+          <p className="ldock__hint">Same content, eight ways to read it.</p>
           {LAYOUTS.map((l) => (
             <button key={l.id} type="button" className="ldock__opt" aria-pressed={l.id === current} onClick={() => select(l.id)}>
               <span className="ldock__thumb">
@@ -1890,6 +1945,120 @@ const DownloadIcon = () => (
     <path d="M12 4v11m0 0 4.5-4.5M12 15l-4.5-4.5M5 19h14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
+
+/* ---- One project's full write-up, shared by the Device layout and the Showcase site (Stage.jsx) ---- */
+function ProjectNotes({ project }) {
+  return (
+    <>
+      <p className="notes__summary">{project.summary}</p>
+      {project.credit && <p className="notes__credit">{project.credit}</p>}
+      <ul className="bullets notes__bullets">
+        {project.bullets.map((b, i) => (
+          <li key={i}>{rich(b)}</li>
+        ))}
+      </ul>
+      <ul className="project__stack" aria-label={`${project.name} tech stack`}>
+        {project.stack.map((t) => (
+          <li key={t}>{t}</li>
+        ))}
+      </ul>
+      <div className="project__links">
+        {project.live && (
+          <a className="project__link" href={project.live} target="_blank" rel="noreferrer" data-umami-event="project-live" data-umami-event-project={project.name}>
+            Visit {project.demo.domain}
+            <ArrowIcon />
+          </a>
+        )}
+        <a className="project__link project__link--quiet" href={project.repo} target="_blank" rel="noreferrer" data-umami-event="project-source" data-umami-event-project={project.name}>
+          Source on GitHub
+          <ArrowIcon />
+        </a>
+      </div>
+    </>
+  );
+}
+
+const RESUME = { href: "/resume.pdf", download: "Perfect_Phanitchaleun_Resume.pdf", "data-umami-event": "resume-download" };
+
+/* ---- Device layout: a screen and nine pads; pressing a pad puts that project on the screen ---- */
+function DeviceClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 20000);
+    return () => clearInterval(id);
+  }, []);
+  return <time dateTime={now.toISOString()}>{now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</time>;
+}
+
+function DeviceBoard() {
+  const [selected, setSelected] = useState(null);
+  const project = selected === null ? null : PROJECTS[selected];
+  const live = PROJECTS.filter((p) => p.live).length;
+  const most = Math.max(...PROJECTS.map((p) => p.stack.length));
+
+  return (
+    <section id="projects" className="dev" aria-labelledby="hero-name">
+      <div className="dev__screen">
+        <div className="dev__bar">
+          <span>PP–1 portfolio</span>
+          <DeviceClock />
+        </div>
+        <h1 id="hero-name" className={project ? "dev__owner" : "dev__title"}>
+          Perfect Phanitchaleun
+        </h1>
+        {project ? (
+          <div className="dev__notes" key={project.name}>
+            <p className="dev__kicker">
+              {selected + 1} / {project.kind}
+            </p>
+            <h2 className="dev__title">{project.name}</h2>
+            <ProjectNotes project={project} />
+            <button type="button" className="dev__back" onClick={() => setSelected(null)}>
+              Back to intro
+            </button>
+          </div>
+        ) : (
+          <>
+            <p className="dev__lead">Full-stack engineer, pivoting to AI engineer. Student, open to SWE internships and new grad roles.</p>
+            <p className="dev__lead dev__lead--quiet">I like to build things and dream about pottery. Press a pad to load a project.</p>
+            <a className="btn-primary dev__resume" {...RESUME} data-umami-event-location="device">
+              Download résumé
+              <DownloadIcon />
+            </a>
+            <div className="dev__meter" aria-hidden="true">
+              {PROJECTS.map((p, i) => (
+                <i key={p.name} className={i === 0 ? "is-lit" : undefined} style={{ height: `${(p.stack.length / most) * 100}%` }} />
+              ))}
+            </div>
+            <div className="dev__foot">
+              <span>Tools per project</span>
+              <span>
+                {PROJECTS.length} projects · {live} live
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+
+      <ol className="dev__pads" aria-label="Projects">
+        {PROJECTS.map((p, i) => (
+          <li key={p.name}>
+            <button type="button" className="dev__pad" aria-pressed={i === selected} onClick={() => setSelected(i === selected ? null : i)} data-umami-event="project-preview" data-umami-event-project={p.name}>
+              <span className="dev__pad-text">
+                <span className="dev__no">
+                  {i + 1} / {p.kind}
+                </span>
+                <span className="dev__name">{p.name}</span>
+                <span className={`dev__key${p.live ? " is-live" : ""}`}>{p.live ? "Live" : "Source"}</span>
+              </span>
+              <img src={p.demo.image} alt="" loading="lazy" />
+            </button>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
 
 export default function App() {
   const [techRef, techInView] = useInView({ threshold: 0.1 });
@@ -1939,12 +2108,20 @@ export default function App() {
             <a href="#experience">Experience</a>
             <a href="#tech"><span className="nav__long">Tech </span>Stack</a>
             <a href="#contact">Contact</a>
+            <a className="nav__new" href="/" aria-label="Back to the new site" data-umami-event="archive-to-new">
+              New site
+              <ArrowIcon />
+            </a>
           </nav>
           <ThemePicker />
         </div>
       </header>
 
       <main id="top">
+        {layoutId === "device" ? (
+          <DeviceBoard />
+        ) : (
+        <>
         {/* ---------- HERO ---------- */}
         <section className="hero" aria-labelledby="hero-name">
           <div className="hero__photo">
@@ -1964,7 +2141,7 @@ export default function App() {
               </a>
               <a className="hero__secondary" href="#projects">See the projects</a>
             </div>
-            <p className="hero__resume-date">Résumé updated September 29, 2026</p>
+            <p className="hero__resume-date">Résumé updated November 11, 2026</p>
             <AiBurnBox />
           </div>
         </section>
@@ -1975,12 +2152,14 @@ export default function App() {
             <h2 id="projects-title" className="section__title">Projects</h2>
             {layoutId === "sliding" && <RailControls railRef={railRef} count={PROJECTS.length} />}
           </div>
-          <div className="projects" ref={railRef}>
+          <div className="projects" ref={railRef} style={{ counterReset: `pp ${PROJECTS.length + 1}` }}>
             {PROJECTS.map((p, i) => (
               <ProjectRow key={p.name} project={p} index={i} />
             ))}
           </div>
         </section>
+        </>
+        )}
 
         {/* ---------- EXPERIENCE ---------- */}
         <section id="experience" className="section" aria-labelledby="experience-title">
@@ -2443,6 +2622,10 @@ html{
   -webkit-backdrop-filter:saturate(160%) blur(18px);
   border-bottom:1px solid var(--line);
 }
+/* the way back from this archived site to the current one */
+.site .nav__links a.nav__new{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border:1px solid var(--line);border-radius:999px;white-space:nowrap;}
+.nav__links a.nav__new::after{display:none;}
+@media (max-width:760px){.site .nav__links a.nav__new{font-size:0;gap:0;padding:6px;}}
 .nav__brand{font-family:var(--font-display);letter-spacing:.02em;font-size:20px;padding:10px 0;}
 .nav__right{display:flex;align-items:center;gap:clamp(16px,4vw,36px);}
 .nav__links{display:flex;gap:clamp(14px,3.6vw,36px);}
@@ -3020,3 +3203,8 @@ html{
   .site .theme-panel,.theme-panel__swatch{transform:none !important;transition:none !important;}
 }
 `;
+
+// Shared with the single-screen Showcase site in Stage.jsx. This file is now the archived site, served at /archive/.
+// eslint-disable-next-line react/only-export-components
+export { AI_USAGE, PROJECTS, EXPERIENCE, TECH, SKILL_SOURCES, GITHUB, SC_PROFILE, DEVICON, RESUME, CSS as BASE_CSS, profilePhoto, rich, useAnalytics };
+export { ArrowIcon, DownloadIcon, ProjectNotes, SoundDock, VisitorCount };
