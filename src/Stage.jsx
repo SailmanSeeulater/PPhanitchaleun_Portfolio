@@ -45,6 +45,18 @@ const VIEWS = [
   { id: "contact", label: "contact" },
 ];
 
+// Every view and project has its own address (#/experience, #/projects/zwans), so links can point at one thing
+// and the browser's back button works.
+const slugOf = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const PROJECT_SLUGS = PROJECTS.map((p) => slugOf(p.name));
+
+function readRoute() {
+  const [view, item] = window.location.hash.replace(/^#\/?/, "").split("/");
+  if (!VIEWS.some((v) => v.id === view)) return { view: "projects", index: null };
+  const index = view === "projects" ? PROJECT_SLUGS.indexOf(item) : -1;
+  return { view, index: index === -1 ? null : index };
+}
+
 function useStageTheme() {
   const [id, setId] = useState(() => {
     try {
@@ -231,8 +243,9 @@ function ContactFrame() {
 
 export default function Stage() {
   const [theme, setTheme] = useStageTheme();
-  const [viewId, setViewId] = useState("projects");
-  const [index, setIndex] = useState(0);
+  const [viewId, setViewId] = useState(() => readRoute().view);
+  const [index, setIndex] = useState(() => readRoute().index ?? 0);
+  const lastView = useRef(null);
   const listRef = useRef(null);
   const stageRef = useRef(null);
   useAnalytics();
@@ -249,7 +262,7 @@ export default function Stage() {
     } catch {
       /* storage unavailable */
     }
-    if (!mac || (seen && !replay) || window.innerWidth <= 760 || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    if (!mac || readRoute().view !== "projects" || (seen && !replay) || window.innerWidth <= 760 || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     let timer = 0;
     let frame = 0;
     const end = () => {
@@ -298,6 +311,34 @@ export default function Stage() {
     setIndex(i);
     setViewId("projects");
   };
+
+  // Keep the address in step with what is on screen. Changing view adds a history entry; flipping through
+  // projects replaces it, so "back" leaves the view instead of rewinding one project at a time.
+  useEffect(() => {
+    const target = viewId === "projects" ? `#/projects/${PROJECT_SLUGS[index]}` : `#/${viewId}`;
+    const first = lastView.current === null;
+    const untouched = !window.location.hash && viewId === "projects" && index === 0;
+    if (!untouched && window.location.hash !== target) {
+      const write = first || lastView.current === viewId ? "replaceState" : "pushState";
+      window.history[write](null, "", target);
+    }
+    lastView.current = viewId;
+  }, [viewId, index]);
+
+  useEffect(() => {
+    const sync = () => {
+      const route = readRoute();
+      lastView.current = route.view;
+      setViewId(route.view);
+      if (route.index !== null) setIndex(route.index);
+    };
+    window.addEventListener("popstate", sync);
+    window.addEventListener("hashchange", sync);
+    return () => {
+      window.removeEventListener("popstate", sync);
+      window.removeEventListener("hashchange", sync);
+    };
+  }, []);
 
   // Arrow keys step through the projects from anywhere on the page, except while typing or inside the music panel.
   useEffect(() => {
