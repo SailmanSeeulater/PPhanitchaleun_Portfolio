@@ -449,8 +449,6 @@ export default function Stage() {
   const [viewId, setViewId] = useState(() => readRoute().view);
   // Projects reopens on the project that was last on screen, even on a later visit.
   const [index, setIndex] = useState(() => readRoute().index ?? Math.max(0, PROJECT_SLUGS.indexOf(stored("stage-project"))));
-  // Apps opened in this visit keep a dot under their dock icon, as if still running.
-  const [ran, setRan] = useState([]);
   // A first-time visitor gets one quiet line above the dock until they open something.
   const [nudge, setNudge] = useState(() => stored("stage-nudge") !== "1");
   const [musicSlot, setMusicSlot] = useState(null);
@@ -492,7 +490,6 @@ export default function Stage() {
     from(viewId);
     setPhase("in");
     setAppId(viewId);
-    setRan((r) => (r.includes(viewId) ? r : [...r, viewId]));
     setNudge(false);
     store("stage-nudge", "1");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -727,7 +724,7 @@ export default function Stage() {
                   {nudge && <p className="dk__nudge">Pick one to open it</p>}
                   <ul className="dk__dock">
                     {APPS.map((a) => (
-                      <li key={a.id} data-app={a.id} className={ran.includes(a.id) ? "is-running" : undefined}>
+                      <li key={a.id} data-app={a.id}>
                         <button type="button" onClick={() => setViewId(a.id)} onPointerEnter={() => setHint(a.id)} onFocus={() => setHint(a.id)} {...hinting} data-umami-event={`home-${a.id}`}>
                           <span className="dk__tile">
                             <AppIcon id={a.id} />
@@ -830,21 +827,22 @@ const STAGE_CSS = `
 .stage{
   font-synthesis:none;
   height:100svh;min-height:560px;overflow:hidden;
-  display:grid;grid-template-columns:clamp(160px,14vw,210px) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);
+  /* a left column about a fifth of the window (name, nav, résumé) and the laptop filling the rest, top to bottom */
+  --side:clamp(210px,21vw,420px);
+  display:grid;grid-template-columns:var(--side) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);
   font-family:var(--font-display);background:var(--bg);
 }
 .stage ::selection{background:var(--text);color:var(--bg);}
 .stage button{font:inherit;color:inherit;}
 
-/* ---- top row: the name on one line, with the role beside it ---- */
-.stage__top{grid-column:1/-1;grid-row:1;padding:18px var(--pad) 14px;min-width:0;}
-.stage__head{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px clamp(18px,2.4vw,34px);min-width:0;}
-.stage__mark{margin:0;font-size:clamp(30px,3.3vw,48px);font-weight:400;letter-spacing:-.015em;line-height:1;white-space:nowrap;}
-.stage__br{display:none;}
+/* ---- top of the left column: the name on two lines, sized to the column, with the role under it ---- */
+.stage__top{grid-column:1;grid-row:1;padding:26px 12px 0 var(--pad);min-width:0;}
+.stage__head{display:flex;flex-direction:column;gap:12px;min-width:0;}
+.stage__mark{margin:0;font-size:calc((var(--side) - var(--pad) - 12px) / 6.9);font-weight:400;letter-spacing:-.015em;line-height:.98;}
 .stage__mark button{all:unset;cursor:pointer;display:block;}
 .stage__mark button:focus-visible{outline:2px solid var(--text);outline-offset:6px;}
-.stage__role{margin:0;font-family:var(--font-body);font-size:14px;line-height:1.4;color:var(--muted);}
-.stage__role span + span::before{content:"·";margin:0 .55em;}
+.stage__role{margin:0;font-family:var(--font-body);font-size:max(12.5px,calc((var(--side) - var(--pad) - 12px) / 20.5));line-height:1.4;color:var(--muted);}
+.stage__role span{display:block;}
 /* ---- the nav and tools: in the left column, above the résumé ---- */
 .stage__nav{display:flex;flex-direction:column;align-items:flex-start;gap:16px;}
 .stage__nav nav{display:flex;flex-direction:column;align-items:flex-start;}
@@ -911,7 +909,7 @@ const STAGE_CSS = `
 
 /* ---- the laptop: always on the page, in every section. It keeps a laptop's proportions (about 16:10) and
    is sized to fit the room it has, so a very wide window gets a bigger laptop, not a stretched one. ---- */
-.stage__main{grid-column:2;grid-row:2;min-height:0;min-width:0;display:grid;place-items:center;container-type:size;margin:0 var(--pad) 26px 0;}
+.stage__main{grid-column:2;grid-row:1/-1;min-height:0;min-width:0;display:grid;place-items:center;container-type:size;margin:26px var(--pad) 26px 0;}
 .stage__mac{position:relative;width:min(100cqw,100cqh * 1.56);aspect-ratio:1.56;min-height:0;min-width:0;transform-origin:50% 100%;}
 .stage__lid{
   position:relative;height:100%;padding:11px;border-radius:var(--round);background:#161617;transform-origin:50% 100%;
@@ -988,13 +986,6 @@ const STAGE_CSS = `
   transition:scale .3s var(--ease);
 }
 .dk__dock b{font-weight:500;font-size:clamp(11.5px,1vw,13.5px);white-space:nowrap;}
-/* a dot under any app opened this visit, as if it were still running */
-.dk__dock li{position:relative;}
-.dk__dock li::after{
-  content:"";position:absolute;left:50%;bottom:-7px;width:4px;height:4px;margin-left:-2px;border-radius:50%;
-  background:var(--text);scale:0;transition:scale .3s var(--ease);
-}
-.dk__dock li.is-running::after{scale:1;}
 .dk__nudge{
   margin:0 0 14px;text-align:center;font-size:13.5px;font-weight:500;color:color-mix(in srgb,var(--text) 70%,transparent);
   animation:nudge 9s var(--ease) 1.6s both;
@@ -1178,10 +1169,10 @@ const STAGE_CSS = `
 @media (max-height:560px),(max-width:900px){.stage .desk__files{display:none;}}
 /* short windows: tighten the header so the laptop keeps its height */
 @media (max-height:760px){
-  .stage__top{padding-top:16px;padding-bottom:14px;}
+  .stage__top{padding-top:16px;}
   .stage__nav nav :is(button,a){font-size:15px;line-height:1.25;}
   .stage__side{padding-bottom:16px;}
-  .stage__main{margin-bottom:16px;}
+  .stage__main{margin-top:16px;margin-bottom:16px;}
 }
 /* mid widths: the three project columns become two rows */
 @media (max-width:1080px){
@@ -1197,11 +1188,9 @@ const STAGE_CSS = `
   .stage{height:auto;min-height:100svh;overflow:visible;display:flex;flex-direction:column;}
   .stage{position:relative;}
   .stage__top{padding:16px var(--pad) 12px;}
-  .stage__head{max-width:calc(100% - 150px);}
-  .stage__mark{font-size:clamp(24px,7.2vw,30px);white-space:normal;}
-  .stage__br{display:inline;}
-  .stage__role span{display:block;}
-  .stage__role span + span::before{content:none;}
+  .stage__head{max-width:calc(100% - 150px);gap:8px;}
+  .stage__role{font-size:14px;}
+  .stage__mark{font-size:clamp(24px,7.2vw,30px);}
   /* the left column dissolves: the tools go to the top right corner, the résumé and footer to the bottom */
   .stage__side{display:contents;}
   .stage__nav{position:absolute;z-index:2;top:20px;right:var(--pad);}
@@ -1232,7 +1221,6 @@ const STAGE_CSS = `
   .dk__dock button{width:100%;}
   .dk__tile{width:60px;}
   .dk__dock b{font-size:12px;}
-  .dk__dock li::after{bottom:-9px;}
   .dk__nudge{order:2;margin:26px 0 0;}
   .app{position:fixed;z-index:80;}
   .app__bar{height:52px;}
