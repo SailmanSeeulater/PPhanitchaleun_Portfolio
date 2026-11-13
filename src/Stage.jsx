@@ -1,23 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import {
-  AI_USAGE,
-  PROJECTS,
-  EXPERIENCE,
-  TECH,
-  SKILL_SOURCES,
-  GITHUB,
-  SC_PROFILE,
-  DEVICON,
-  RESUME,
-  BASE_CSS,
-  rich,
-  useAnalytics,
-  ArrowIcon,
-  DownloadIcon,
-  ProjectNotes,
-  SoundDock,
-  VisitorCount,
-} from "./App.jsx";
+import { AI_USAGE, DEVICON, GITHUB, EXPERIENCE, PROJECTS, SKILL_SOURCES, TECH, rich } from "./data";
+import { ArrowIcon, DownloadIcon, ProjectNotes, RESUME, VisitorCount, useAnalytics } from "./shared";
+import { DOCK_CSS, SC_PROFILE, SoundDock } from "./sound";
 
 /* The Showcase site: one screen, no page scroll, and one laptop that never leaves.
    Its screen is a desktop: drifting lights and a dock of five sections. Choosing one opens it
@@ -45,7 +29,21 @@ const APPS = [
   { id: "stack", name: "Tech stack" },
   { id: "about", name: "About" },
   { id: "contact", name: "Contact" },
+  { id: "music", name: "Music" },
+  { id: "resume", name: "Résumé" },
 ];
+// The top-right nav lists the five sections; Music and Résumé are reached from the dock, the record and the résumé link.
+const NAV = APPS.slice(0, 5);
+
+// Listed under the jobs on the Experience timeline.
+const EDUCATION = {
+  role: "B.S. Computer Science",
+  org: "San Diego State University",
+  about: "Operating Systems, Algorithms, Machine Learning, Artificial Intelligence, Programming Languages",
+  meta: ["Aug 2025 to Jun 2027", "San Diego, CA", "Expected"],
+  bullets: [],
+  stack: [],
+};
 
 const APP_ICONS = {
   projects: <path d="M4 5.5h6.5V12H4zM13.5 5.5H20V12h-6.5zM4 15h6.5v4.5H4zM13.5 15H20v4.5h-6.5z" />,
@@ -53,6 +51,8 @@ const APP_ICONS = {
   stack: <path d="m12 4 8 4-8 4-8-4zM4 12l8 4 8-4M4 16l8 4 8-4" />,
   about: <path d="M12 12.5A3.75 3.75 0 1 0 12 5a3.75 3.75 0 0 0 0 7.5zM5 20c.6-3.4 3.3-5 7-5s6.4 1.6 7 5" />,
   contact: <path d="M4 6.5h16v11H4zM4.5 7l7.5 6 7.5-6" />,
+  music: <path d="M9.500 18V6l10-2v12M9.500 18a2.750 2.750 0 1 1-5.500 0 2.750 2.750 0 0 1 5.500 0zM19.500 16a2.750 2.750 0 1 1-5.500 0 2.750 2.750 0 0 1 5.500 0z" />,
+  resume: <path d="M7 3.500h7l4 4V20.500H7zM13.500 3.500V8H18M10 12.500h5M10 16h5" />,
 };
 const AppIcon = ({ id }) => (
   <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -143,29 +143,44 @@ function ProjectsApp({ index, setIndex, listRef }) {
   );
 }
 
+/* ---- Experience: one line down the page, newest at the top, a dot for each stop ---- */
 function ExperienceApp() {
+  const stops = [...EXPERIENCE, EDUCATION];
   return (
-    <div className="xp">
-      {EXPERIENCE.map((job) => (
-        <article key={job.role}>
-          <p className="app__meta">{job.meta.join(" · ")}</p>
-          <h2 className="app__title">{job.role}</h2>
-          <p className="app__lead">
-            <strong>{job.org}</strong> · {job.about}
-          </p>
-          <ul className="bullets app__bullets">
-            {job.bullets.map((b, i) => (
-              <li key={i}>{rich(b)}</li>
-            ))}
-          </ul>
-          <ul className="project__stack" aria-label={`${job.role} tech stack`}>
-            {job.stack.map((t) => (
-              <li key={t}>{t}</li>
-            ))}
-          </ul>
-        </article>
-      ))}
-    </div>
+    <ol className="tl">
+      {stops.map((job) => {
+        const [when, ...where] = job.meta;
+        return (
+          <li key={job.role} className={/present/i.test(when) ? "is-now" : undefined}>
+            <p className="tl__when">
+              {when}
+              <span>{where.join(" · ")}</span>
+            </p>
+            <span className="tl__dot" aria-hidden="true" />
+            <article>
+              <h2 className="app__title">{job.role}</h2>
+              <p className="app__lead">
+                <strong>{job.org}</strong> · {job.about}
+              </p>
+              {job.bullets.length > 0 && (
+                <ul className="bullets app__bullets">
+                  {job.bullets.map((b, k) => (
+                    <li key={k}>{rich(b)}</li>
+                  ))}
+                </ul>
+              )}
+              {job.stack.length > 0 && (
+                <ul className="project__stack" aria-label={`${job.role} tech stack`}>
+                  {job.stack.map((t) => (
+                    <li key={t}>{t}</li>
+                  ))}
+                </ul>
+              )}
+            </article>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -275,10 +290,69 @@ function ContactApp() {
   );
 }
 
+/* ---- Résumé: the PDF on the laptop screen, with the download beside it ---- */
+function ResumeApp() {
+  return (
+    <div className="rs">
+      <iframe src="/resume.pdf#view=FitH&toolbar=0" title="Résumé of Perfect Phanitchaleun" />
+      <a className="rs__get" {...RESUME} data-umami-event-location="resume-app">
+        Download
+        <DownloadIcon />
+      </a>
+    </div>
+  );
+}
+
+// A soft tick when an app opens or closes. It only sounds while the visitor has music playing,
+// so the site stays silent unless they chose to hear it.
+let tickCtx = null;
+function tick(up) {
+  if (!document.querySelector(".dock__eq.is-playing")) return;
+  try {
+    tickCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+    const t = tickCtx.currentTime;
+    const osc = tickCtx.createOscillator();
+    const gain = tickCtx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(up ? 520 : 760, t);
+    osc.frequency.exponentialRampToValueAtTime(up ? 880 : 420, t + 0.09);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.05, t + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+    osc.connect(gain).connect(tickCtx.destination);
+    osc.start(t);
+    osc.stop(t + 0.14);
+  } catch {
+    /* no audio available */
+  }
+}
+
+const stored = (key) => {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+const store = (key, value) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* storage unavailable */
+  }
+};
+
 export default function Stage() {
   const [theme, setTheme] = useStageTheme();
   const [viewId, setViewId] = useState(() => readRoute().view);
-  const [index, setIndex] = useState(() => readRoute().index ?? 0);
+  // Projects reopens on the project that was last on screen, even on a later visit.
+  const [index, setIndex] = useState(() => readRoute().index ?? Math.max(0, PROJECT_SLUGS.indexOf(stored("stage-project"))));
+  // Apps opened in this visit keep a dot under their dock icon, as if still running.
+  const [ran, setRan] = useState([]);
+  // A first-time visitor gets one quiet line above the dock until they open something.
+  const [nudge, setNudge] = useState(() => stored("stage-nudge") !== "1");
+  const [musicSlot, setMusicSlot] = useState(null);
+  const opened = useRef(false);
   // The app on screen. It trails viewId by the length of the closing zoom, so the app can animate away.
   const [appId, setAppId] = useState(() => (readRoute().view === "home" ? null : readRoute().view));
   const [phase, setPhase] = useState("in");
@@ -316,8 +390,21 @@ export default function Stage() {
     from(viewId);
     setPhase("in");
     setAppId(viewId);
+    setRan((r) => (r.includes(viewId) ? r : [...r, viewId]));
+    setNudge(false);
+    store("stage-nudge", "1");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewId]);
+
+  // The tick is skipped for whatever is on screen when the page loads.
+  useEffect(() => {
+    if (opened.current) tick(viewId !== "home");
+    opened.current = true;
+  }, [viewId]);
+
+  useEffect(() => {
+    store("stage-project", PROJECT_SLUGS[index]);
+  }, [index]);
 
   // First-visit intro: a closed laptop opens in the middle of the page, its screen lights up, then it settles
   // into place while everything else arrives. Any click or key skips it. Add ?intro to replay.
@@ -449,8 +536,8 @@ export default function Stage() {
   const hinting = { onPointerLeave: () => setHint(null), onBlur: () => setHint(null) };
 
   return (
-    <div className="site stage" ref={stageRef}>
-      <style>{BASE_CSS + STAGE_CSS}</style>
+    <div className="site stage" ref={stageRef} data-open={app ? "" : undefined}>
+      <style>{BASE_CSS + DOCK_CSS + STAGE_CSS}</style>
 
       <div className="stage__top">
         <header className="stage__head">
@@ -470,7 +557,7 @@ export default function Stage() {
 
         <div className="stage__nav">
           <nav aria-label="Primary" className={hint ? "has-hint" : undefined}>
-            {APPS.map((a) => (
+            {NAV.map((a) => (
               <button key={a.id} type="button" className={hint === a.id ? "is-hint" : undefined} aria-current={a.id === viewId ? "page" : undefined} onClick={() => setViewId(a.id)} data-umami-event={`view-${a.id}`}>
                 {a.name.toLowerCase()}
               </button>
@@ -493,7 +580,7 @@ export default function Stage() {
                 />
               ))}
             </div>
-            <SoundDock />
+            <SoundDock slot={appId === "music" ? musicSlot : null} onOpen={() => setViewId(viewId === "music" ? "home" : "music")} />
           </div>
         </div>
       </div>
@@ -502,6 +589,9 @@ export default function Stage() {
         <a className="stage__resume" {...RESUME} data-umami-event-location="stage">
           Résumé
           <DownloadIcon />
+        </a>
+        <a className="stage__archive" href="/archive/index.html" data-umami-event="view-archive">
+          Archive
         </a>
         <p className="stage__foot">
           <span>© {new Date().getFullYear()} Perfect Phanitchaleun</span>
@@ -521,9 +611,10 @@ export default function Stage() {
                   <i />
                 </div>
                 <nav className="dk" aria-label="Sections">
+                  {nudge && <p className="dk__nudge">Pick one to open it</p>}
                   <ul className="dk__dock">
                     {APPS.map((a) => (
-                      <li key={a.id} data-app={a.id}>
+                      <li key={a.id} data-app={a.id} className={ran.includes(a.id) ? "is-running" : undefined}>
                         <button type="button" onClick={() => setViewId(a.id)} onPointerEnter={() => setHint(a.id)} onFocus={() => setHint(a.id)} {...hinting} data-umami-event={`home-${a.id}`}>
                           <span className="dk__tile">
                             <AppIcon id={a.id} />
@@ -548,6 +639,8 @@ export default function Stage() {
                     {app.id === "stack" && <StackApp openProject={openProject} />}
                     {app.id === "about" && <AboutApp />}
                     {app.id === "contact" && <ContactApp />}
+                    {app.id === "music" && <div className="mu" ref={setMusicSlot} />}
+                    {app.id === "resume" && <ResumeApp />}
                   </div>
                 </section>
               )}
@@ -559,6 +652,45 @@ export default function Stage() {
     </div>
   );
 }
+
+// The few base rules and the two borrowed color themes, so this site no longer loads the archive's stylesheet.
+const BASE_CSS = `
+*{box-sizing:border-box;}
+:root[data-stage]{--ease:cubic-bezier(.16,1,.3,1);}
+html{background:var(--bg);accent-color:var(--accent-fill);scrollbar-color:color-mix(in srgb,var(--text) 32%,transparent) var(--bg);}
+:root[data-theme="slate"]{
+  color-scheme:light;
+  --bg:#eef2f6;--surface:#f8fafc;--card:#f8fafc;--placeholder:#eef2f6;
+  --brand:#334155;--accent-fill:#334155;--accent:#0f172a;--card-ink:#334155;--on-accent:#fff;--ink-on-light:#334155;
+  --text:#0f172a;--muted:color-mix(in srgb,#0f172a 78%,#eef2f6);--shadow:#334155;--line:rgba(51,65,85,.18);
+}
+:root[data-theme="mustard"]{
+  color-scheme:dark;
+  --bg:#1f2124;--surface:#2a2d31;--card:#2a2d31;--placeholder:#2a2d31;
+  --brand:#f2c230;--accent-fill:#f2c230;--accent:#f2c230;--card-ink:#f2c230;--on-accent:#1f2124;--ink-on-light:#1f2124;
+  --text:#f1efe8;--muted:color-mix(in srgb,#f1efe8 78%,#1f2124);--shadow:#000;--line:rgba(242,194,48,.22);
+}
+.site{margin:0;color:var(--text);font-family:var(--font-body);font-weight:400;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;line-height:1.55;}
+.site a{color:inherit;text-decoration:none;}
+.site ul{list-style:none;margin:0;padding:0;}
+.site :focus-visible{outline:2px solid var(--accent-fill);outline-offset:3px;border-radius:6px;}
+.bullets li{position:relative;padding-left:20px;color:var(--muted);font-size:15.5px;line-height:1.66;}
+.bullets li::before{content:"";position:absolute;left:0;top:.72em;width:6px;height:6px;border-radius:50%;background:var(--accent-fill);}
+.site .project__stack{display:flex;flex-wrap:wrap;gap:8px;margin-top:24px;}
+.project__stack li{font-size:12.5px;padding:5px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line);}
+.project__links{display:flex;flex-wrap:wrap;gap:2px 26px;margin-top:18px;}
+.site .project__link{
+  display:inline-flex;align-items:center;gap:6px;padding:10px 0;font-size:15px;
+  text-decoration:underline;text-decoration-color:var(--accent-fill);text-decoration-thickness:1px;text-underline-offset:6px;
+  transition:gap .25s var(--ease),color .25s var(--ease);
+}
+.site .project__link--quiet{color:var(--muted);text-decoration-color:var(--line);}
+.site .project__link:hover{gap:10px;}
+.footer__visits{display:inline-flex;align-items:center;gap:8px;}
+.footer__pulse{position:relative;width:7px;height:7px;border-radius:50%;background:var(--accent-fill);}
+.footer__pulse::after{content:"";position:absolute;inset:0;border-radius:50%;background:var(--accent-fill);animation:visitPulse 1.8s var(--ease) infinite;}
+@keyframes visitPulse{from{transform:scale(1);opacity:.6;}to{transform:scale(2.8);opacity:0;}}
+`;
 
 const STAGE_CSS = `
 /* ================= SHOWCASE SITE ================= */
@@ -659,6 +791,7 @@ const STAGE_CSS = `
   font-family:var(--font-body);font-size:12.5px;line-height:1.4;color:var(--muted);
 }
 .stage__foot .footer__visits{display:inline-flex;align-items:center;gap:7px;}
+.stage__archive{display:none;}
 
 /* ---- the laptop: always on the page, in every section ---- */
 .stage__main{grid-column:2;grid-row:2;min-height:0;min-width:0;display:flex;padding:0 var(--pad) 26px 0;}
@@ -683,7 +816,7 @@ const STAGE_CSS = `
 @keyframes lavaA{0%{translate:0 0;scale:1;}30%{translate:46% -52%;scale:1.2;}62%{translate:92% -8%;scale:.86;}100%{translate:28% -78%;scale:1.1;}}
 @keyframes lavaB{0%{translate:0 0;scale:1;}28%{translate:-52% 62%;scale:.88;}60%{translate:38% 96%;scale:1.22;}100%{translate:66% 30%;scale:1;}}
 @keyframes lavaC{0%{translate:0 0;scale:1;}34%{translate:-70% -58%;scale:1.16;}66%{translate:-118% 14%;scale:.9;}100%{translate:-34% -30%;scale:1.12;}}
-.dk{position:relative;z-index:1;margin-top:auto;}
+.dk{position:relative;z-index:1;margin-top:auto;display:flex;flex-direction:column;align-items:center;}
 .stage .dk__dock{
   list-style:none;margin:0;padding:clamp(10px,1.1vw,14px);display:flex;gap:clamp(8px,1.2vw,16px);border-radius:clamp(22px,2.4vw,30px);
   background:color-mix(in srgb,var(--bg) 55%,transparent);backdrop-filter:blur(18px) saturate(160%);-webkit-backdrop-filter:blur(18px) saturate(160%);
@@ -699,6 +832,18 @@ const STAGE_CSS = `
   transition:scale .3s var(--ease);
 }
 .dk__dock b{font-weight:500;font-size:clamp(11.5px,1vw,13.5px);white-space:nowrap;}
+/* a dot under any app opened this visit, as if it were still running */
+.dk__dock li{position:relative;}
+.dk__dock li::after{
+  content:"";position:absolute;left:50%;bottom:-7px;width:4px;height:4px;margin-left:-2px;border-radius:50%;
+  background:var(--text);scale:0;transition:scale .3s var(--ease);
+}
+.dk__dock li.is-running::after{scale:1;}
+.dk__nudge{
+  margin:0 0 14px;text-align:center;font-size:13.5px;font-weight:500;color:color-mix(in srgb,var(--text) 70%,transparent);
+  animation:nudge 9s var(--ease) 1.6s both;
+}
+@keyframes nudge{0%{opacity:0;translate:0 6px;}8%,78%{opacity:1;translate:0 0;}100%{opacity:0;translate:0 0;}}
 .dk__dock button:is(:hover,:focus-visible){translate:0 -8px;}
 .dk__dock button:active .dk__tile{scale:.92;}
 
@@ -774,8 +919,53 @@ const STAGE_CSS = `
 .pj__notes .notes__credit{margin:10px 0 0;font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);}
 .pj__notes .bullets{margin-top:16px;}
 
-/* Experience */
-.xp{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:clamp(28px,5vw,72px);align-content:center;}
+/* Experience: a timeline. Dates on the left, one line down the middle, a dot at each stop */
+.stage .tl{
+  position:relative;list-style:none;margin:0 auto;padding:0;max-width:980px;
+  display:flex;flex-direction:column;justify-content:center;gap:clamp(16px,2vw,26px);
+}
+.tl::before{
+  content:"";position:absolute;left:calc(clamp(110px,14vw,176px) + 20px);top:10px;bottom:10px;width:1px;
+  background:linear-gradient(to bottom,var(--text) 0,color-mix(in srgb,var(--text) 22%,transparent) 30%,color-mix(in srgb,var(--text) 22%,transparent) 100%);
+}
+.tl > li{display:grid;grid-template-columns:clamp(110px,14vw,176px) 41px minmax(0,1fr);align-items:start;}
+.tl__when{margin:9px 0 0;text-align:right;font-size:14px;font-weight:500;line-height:1.35;}
+.tl__when span{display:block;font-weight:400;font-size:13px;color:var(--muted);}
+.tl__dot{
+  position:relative;justify-self:center;margin-top:11px;width:11px;height:11px;border-radius:50%;
+  background:var(--bg);box-shadow:0 0 0 1.5px var(--text),0 0 0 6px var(--bg);
+}
+.tl .is-now .tl__dot{background:var(--text);}
+.tl .is-now .tl__dot::after{content:"";position:absolute;inset:0;border-radius:50%;background:var(--text);animation:visitPulse 2.2s var(--ease) infinite;}
+.tl .app__title{margin:0;font-size:clamp(24px,2.4vw,34px);}
+.tl .app__lead{margin-top:8px;font-size:clamp(15px,1.25vw,17.5px);}
+.tl .app__bullets{margin-top:10px;max-width:74ch;}
+.tl .app__bullets li{font-size:14px;line-height:1.5;}
+.tl .project__stack{margin-top:10px;}
+
+/* Music: the player from the record, given the whole screen */
+.mu{display:flex;height:100%;}
+.stage .mu .dock__panel{
+  position:static;flex:1;width:auto;padding:0;border:none;border-radius:0;background:none;box-shadow:none;
+  opacity:1;visibility:visible;transform:none;transition:none;
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-auto-rows:min-content;align-content:center;
+  column-gap:clamp(28px,5vw,80px);row-gap:clamp(12px,1.4vw,18px);
+}
+.mu .dock__panel > *{grid-column:1;}
+.mu .dock__now{gap:clamp(14px,1.8vw,24px);}
+.mu .dock__art{width:clamp(96px,11vw,150px);height:auto;aspect-ratio:1;border-radius:18px;}
+.mu .dock__title{font-family:var(--font-display);font-size:clamp(28px,3.2vw,46px);line-height:1;letter-spacing:-.015em;white-space:normal;}
+.mu .dock__artist{font-size:15px;}
+.stage .mu .dock__list{grid-column:2;grid-row:1/span 8;align-self:center;max-height:min(100%,56svh);overflow-y:auto;scrollbar-width:thin;margin:0;}
+.mu .dock__list button{font-family:var(--font-display);font-size:clamp(19px,1.9vw,27px);letter-spacing:-.015em;padding:5px 0;}
+
+/* Résumé */
+.rs{position:relative;display:flex;}
+.rs iframe{flex:1;width:100%;min-height:320px;border:none;border-radius:12px;background:var(--surface);}
+.rs__get{
+  position:absolute;right:16px;bottom:16px;display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;
+  background:var(--text);color:var(--bg) !important;font-size:14px;font-weight:500;box-shadow:0 12px 24px -14px color-mix(in srgb,var(--shadow) 80%,transparent);
+}
 
 /* Tech stack */
 .sk{display:flex;flex-direction:column;}
@@ -843,29 +1033,54 @@ const STAGE_CSS = `
   .stage__role{flex-basis:100%;}
   .ab{grid-template-columns:minmax(0,1fr);align-content:center;}
 }
-/* narrow windows: the page stacks and scrolls; the laptop is a tall screen and apps scroll inside it */
+/* phones: no laptop. The screen is the phone itself: a home screen of icons, and apps that open full screen */
 @media (max-width:760px){
   .stage{height:auto;min-height:100svh;overflow:visible;display:flex;flex-direction:column;}
-  .stage__top{flex-direction:column-reverse;gap:18px;padding:14px var(--pad) 18px;}
-  .stage__nav{align-self:stretch;justify-content:space-between;align-items:center;}
-  .stage__nav nav{flex-direction:row;flex-wrap:wrap;gap:4px 14px;}
-  .stage__nav nav :is(button,a){font-size:15px;}
-  .stage__nav nav .is-hint{translate:0 0;}
-  .stage__nav nav button::after{display:none;}
+  .stage__top{padding:16px var(--pad) 12px;align-items:center;}
+  .stage__head{flex:1;}
+  .stage__mark{font-size:clamp(24px,7.2vw,30px);}
+  /* an open app takes the whole phone screen, so the page's own header and footer step aside */
+  .stage[data-open] :is(.stage__top,.stage__side){visibility:hidden;}
+  .stage__nav nav{display:none;}
   .stage__tools{flex-direction:row;gap:12px;padding:0;}
   .stage__themes{grid-template-columns:repeat(4,18px);}
   .stage .dock__tab{width:36px;height:36px;}
-  .stage__main{flex:none;height:78svh;padding:0 var(--pad) 22px;}
-  .stage__side{order:3;padding:0 var(--pad) 28px;}
-  .desk{padding:14px 10px;}
-  .stage .dk__dock{gap:4px;padding:8px;}
-  .dk__dock button{width:clamp(44px,13.6vw,66px);gap:6px;}
-  .dk__tile{width:clamp(40px,11.5vw,54px);}
-  .dk__dock b{font-size:10px;}
+  .stage__role{flex-basis:100%;}
+  .stage__main{order:2;flex:1;padding:0;min-height:60svh;}
+  .stage__mac{display:flex;}
+  .stage__lid{flex:1;height:auto;padding:0;border-radius:0;background:none;box-shadow:none;outline:none;}
+  .stage__lid::before{display:none;}
+  .stage__screen{height:auto;min-height:60svh;border-radius:0;}
+  .desk{padding:26px var(--pad);justify-content:flex-start;}
+  .dk{margin:0;align-self:stretch;align-items:stretch;}
+  .stage .dk__dock{
+    display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px 6px;padding:0;border-radius:0;
+    background:none;backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;
+  }
+  .dk__dock button{width:100%;}
+  .dk__tile{width:60px;}
+  .dk__dock b{font-size:12px;}
+  .dk__dock li::after{bottom:-9px;}
+  .dk__nudge{order:2;margin:26px 0 0;}
+  .app{position:fixed;z-index:80;}
+  .app__bar{height:52px;}
+  .app__body{padding:8px var(--pad) 32px;}
   .pj{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;height:auto;}
+  .pj__side{grid-column:1;}
   .pj__shot{aspect-ratio:4/3;}
   .pj__notes{overflow:visible;}
+  .tl::before{left:5px;}
+  .tl > li{grid-template-columns:11px minmax(0,1fr);column-gap:18px;}
+  .tl__when{grid-column:2;margin:0 0 6px;text-align:left;}
+  .tl__when span{display:inline;margin-left:8px;}
+  .tl__dot{grid-column:1;grid-row:1;margin-top:5px;}
+  .tl > li > article{grid-column:2;}
+  .stage .mu .dock__panel{grid-template-columns:minmax(0,1fr);}
+  .stage .mu .dock__list{grid-column:1;grid-row:auto;}
   .ct__links li{grid-template-columns:minmax(0,1fr);gap:2px;}
+  .stage__side{order:3;flex-direction:row;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:10px 18px;padding:18px var(--pad) 26px;}
+  .stage__archive{display:inline;font-family:var(--font-body);font-size:14px;font-weight:500;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px;}
+  .stage__foot{flex-basis:100%;margin:0;}
 }
 @media (prefers-reduced-motion:reduce){
   .desk__lights i,.app,.pj__shot img,.pj__notes,.stage .dock__tab{animation:none !important;}
