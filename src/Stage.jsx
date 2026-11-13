@@ -1205,7 +1205,11 @@ const STAGE_CSS = `
   .stage__mac{display:flex;}
   .stage__lid{flex:1;height:auto;padding:0;border-radius:0;background:none;box-shadow:none;outline:none;}
   .stage__lid::before{display:none;}
-  .stage__screen{height:auto;min-height:60svh;border-radius:0;}
+  .stage__screen{height:auto;min-height:60svh;border-radius:0;overflow:visible;background:none;}
+  /* with no laptop to hold them, the lights leave the screen's rectangle and drift behind the whole page */
+  .desk__lights{position:fixed;z-index:0;}
+  .desk__lights i{width:86vw;}
+  .stage__top,.stage__side{position:relative;z-index:1;}
   .desk{padding:26px var(--pad);justify-content:flex-start;}
   /* the folder and the text file belong to the laptop's desktop; a phone has no room for them */
   .stage .desk__files{display:none;}
