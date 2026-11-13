@@ -645,18 +645,20 @@ export default function Stage() {
         <header className="stage__head">
           <h1 className="stage__mark">
             <button type="button" onClick={() => setViewId("home")} aria-label="Perfect Phanitchaleun, back to the desktop">
-              Perfect
-              <br />
+              Perfect <br className="stage__br" />
               Phanitchaleun.
             </button>
           </h1>
           <p className="stage__role">
-            Software Engineer
-            <br />
-            A student, looking for SWE new grad roles
+            <span>Software Engineer</span>
+            <span>A student, looking for SWE new grad roles</span>
           </p>
         </header>
 
+      </div>
+
+      {/* the left column: the nav and tools, then the résumé and footer under them */}
+      <aside className="stage__side">
         <div className="stage__nav">
           <nav aria-label="Primary" className={hint ? "has-hint" : undefined}>
             {NAV.map((a) => (
@@ -685,20 +687,19 @@ export default function Stage() {
             <SoundDock slot={appId === "music" ? musicSlot : null} onOpen={() => setViewId(viewId === "music" ? "home" : "music")} />
           </div>
         </div>
-      </div>
-
-      <aside className="stage__side">
-        <a className="stage__resume" {...RESUME} data-umami-event-location="stage">
-          Résumé
-          <DownloadIcon />
-        </a>
-        <a className="stage__archive" href="/archive/index.html" data-umami-event="view-archive">
-          Archive
-        </a>
-        <p className="stage__foot">
-          <span>© {new Date().getFullYear()} Perfect Phanitchaleun</span>
-          <VisitorCount />
-        </p>
+        <div className="stage__base">
+          <a className="stage__resume" {...RESUME} data-umami-event-location="stage">
+            Résumé
+            <DownloadIcon />
+          </a>
+          <a className="stage__archive" href="/archive/index.html" data-umami-event="view-archive">
+            Archive
+          </a>
+          <p className="stage__foot">
+            <span>© {new Date().getFullYear()} Perfect Phanitchaleun</span>
+            <VisitorCount />
+          </p>
+        </div>
       </aside>
 
       <main id="top" className="stage__main" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
@@ -829,40 +830,40 @@ const STAGE_CSS = `
 .stage{
   font-synthesis:none;
   height:100svh;min-height:560px;overflow:hidden;
-  display:grid;grid-template-columns:clamp(150px,13vw,200px) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);
+  display:grid;grid-template-columns:clamp(160px,14vw,210px) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);
   font-family:var(--font-display);background:var(--bg);
 }
 .stage ::selection{background:var(--text);color:var(--bg);}
 .stage button{font:inherit;color:inherit;}
 
-/* ---- top row: wordmark on the left, nav and tools on the right ---- */
-.stage__top{
-  grid-column:1/-1;grid-row:1;display:flex;justify-content:space-between;align-items:flex-start;gap:20px;
-  padding:26px var(--pad) 22px;min-width:0;
-}
-.stage__head{display:flex;align-items:flex-end;flex-wrap:wrap;gap:10px clamp(18px,3vw,40px);min-width:0;}
-.stage__mark{margin:0;font-size:clamp(32px,3.75vw,54px);font-weight:400;letter-spacing:-.015em;line-height:.98;}
+/* ---- top row: the name on one line, with the role beside it ---- */
+.stage__top{grid-column:1/-1;grid-row:1;padding:18px var(--pad) 14px;min-width:0;}
+.stage__head{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px clamp(18px,2.4vw,34px);min-width:0;}
+.stage__mark{margin:0;font-size:clamp(30px,3.3vw,48px);font-weight:400;letter-spacing:-.015em;line-height:1;white-space:nowrap;}
+.stage__br{display:none;}
 .stage__mark button{all:unset;cursor:pointer;display:block;}
 .stage__mark button:focus-visible{outline:2px solid var(--text);outline-offset:6px;}
-.stage__role{margin:0 0 4px;font-family:var(--font-body);font-size:14px;line-height:1.4;color:var(--muted);}
-.stage__nav{display:flex;align-items:flex-start;gap:16px;flex:none;}
-.stage__nav nav{display:flex;flex-direction:column;align-items:flex-end;}
+.stage__role{margin:0;font-family:var(--font-body);font-size:14px;line-height:1.4;color:var(--muted);}
+.stage__role span + span::before{content:"·";margin:0 .55em;}
+/* ---- the nav and tools: in the left column, above the résumé ---- */
+.stage__nav{display:flex;flex-direction:column;align-items:flex-start;gap:16px;}
+.stage__nav nav{display:flex;flex-direction:column;align-items:flex-start;}
 .stage__nav nav :is(button,a){
   position:relative;padding:0;border:none;background:none;cursor:pointer;white-space:nowrap;
-  font-size:17px;line-height:1.3;font-weight:400;letter-spacing:-.005em;color:var(--muted);text-decoration:none;
+  font-size:17px;line-height:1.35;font-weight:400;letter-spacing:-.005em;color:var(--muted);text-decoration:none;
   transition:color .25s var(--ease),opacity .25s var(--ease),translate .3s var(--ease);
 }
 .stage__nav nav :is(button,a):hover{color:var(--text);}
 .stage__nav nav [aria-current]{color:var(--text);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px;}
-/* pointing at a dock icon: its name in the nav steps forward with a dot, and the other names fall back */
+/* pointing at a dock icon: its name in the nav steps forward behind a dot, and the other names fall back */
 .stage__nav nav.has-hint > :not(.is-hint){opacity:.28;}
-.stage__nav nav .is-hint{color:var(--text);translate:-14px 0;}
+.stage__nav nav .is-hint{color:var(--text);translate:14px 0;}
 .stage__nav nav button::after{
-  content:"";position:absolute;left:calc(100% + 8px);top:50%;width:6px;height:6px;margin-top:-3px;border-radius:50%;
+  content:"";position:absolute;right:calc(100% + 8px);top:50%;width:6px;height:6px;margin-top:-3px;border-radius:50%;
   background:var(--text);scale:0;transition:scale .3s var(--ease);
 }
 .stage__nav nav .is-hint::after{scale:1;}
-.stage__tools{display:flex;flex-direction:column;align-items:center;gap:14px;padding-top:3px;}
+.stage__tools{display:flex;align-items:center;gap:14px;}
 .stage__themes{display:grid;grid-template-columns:repeat(2,18px);gap:6px;}
 .stage__themes button{
   width:18px;height:18px;padding:0;border-radius:50%;cursor:pointer;
@@ -893,8 +894,9 @@ const STAGE_CSS = `
   background:var(--surface);backdrop-filter:none;-webkit-backdrop-filter:none;transform-origin:top right;
 }
 
-/* ---- left column: just the résumé and the footer ---- */
-.stage__side{grid-column:1;grid-row:2;display:flex;flex-direction:column;justify-content:flex-end;padding:0 12px 26px var(--pad);min-height:0;min-width:0;}
+/* ---- left column ---- */
+.stage__side{grid-column:1;grid-row:2;display:flex;flex-direction:column;justify-content:flex-end;gap:clamp(18px,3vh,30px);padding:0 12px 26px var(--pad);min-height:0;min-width:0;}
+.stage__base{display:flex;flex-direction:column;}
 .stage__resume{
   align-self:flex-start;display:inline-flex;align-items:center;gap:8px;
   font-family:var(--font-body);font-size:14px;font-weight:500;
@@ -907,9 +909,10 @@ const STAGE_CSS = `
 .stage__foot .footer__visits{display:inline-flex;align-items:center;gap:7px;}
 .stage__archive{display:none;}
 
-/* ---- the laptop: always on the page, in every section ---- */
-.stage__main{grid-column:2;grid-row:2;min-height:0;min-width:0;display:flex;padding:0 var(--pad) 26px 0;}
-.stage__mac{position:relative;flex:1;min-height:0;min-width:0;transform-origin:50% 100%;}
+/* ---- the laptop: always on the page, in every section. It keeps a laptop's proportions (about 16:10) and
+   is sized to fit the room it has, so a very wide window gets a bigger laptop, not a stretched one. ---- */
+.stage__main{grid-column:2;grid-row:2;min-height:0;min-width:0;display:grid;place-items:center;container-type:size;margin:0 var(--pad) 26px 0;}
+.stage__mac{position:relative;width:min(100cqw,100cqh * 1.56);aspect-ratio:1.56;min-height:0;min-width:0;transform-origin:50% 100%;}
 .stage__lid{
   position:relative;height:100%;padding:11px;border-radius:var(--round);background:#161617;transform-origin:50% 100%;
   /* no light inner ring and no light screen backing: either one shows as pale pixels where the corners curve */
@@ -1177,7 +1180,8 @@ const STAGE_CSS = `
 @media (max-height:760px){
   .stage__top{padding-top:16px;padding-bottom:14px;}
   .stage__nav nav :is(button,a){font-size:15px;line-height:1.25;}
-  .stage__side,.stage__main{padding-bottom:16px;}
+  .stage__side{padding-bottom:16px;}
+  .stage__main{margin-bottom:16px;}
 }
 /* mid widths: the three project columns become two rows */
 @media (max-width:1080px){
@@ -1191,25 +1195,32 @@ const STAGE_CSS = `
 /* phones: no laptop. The screen is the phone itself: a home screen of icons, and apps that open full screen */
 @media (max-width:760px){
   .stage{height:auto;min-height:100svh;overflow:visible;display:flex;flex-direction:column;}
-  .stage__top{padding:16px var(--pad) 12px;align-items:center;}
-  .stage__head{flex:1;}
-  .stage__mark{font-size:clamp(24px,7.2vw,30px);}
+  .stage{position:relative;}
+  .stage__top{padding:16px var(--pad) 12px;}
+  .stage__head{max-width:calc(100% - 150px);}
+  .stage__mark{font-size:clamp(24px,7.2vw,30px);white-space:normal;}
+  .stage__br{display:inline;}
+  .stage__role span{display:block;}
+  .stage__role span + span::before{content:none;}
+  /* the left column dissolves: the tools go to the top right corner, the résumé and footer to the bottom */
+  .stage__side{display:contents;}
+  .stage__nav{position:absolute;z-index:2;top:20px;right:var(--pad);}
   /* an open app takes the whole phone screen, so the page's own header and footer step aside */
-  .stage[data-open] :is(.stage__top,.stage__side){visibility:hidden;}
+  .stage[data-open] :is(.stage__top,.stage__nav,.stage__base){visibility:hidden;}
   .stage__nav nav{display:none;}
-  .stage__tools{flex-direction:row;gap:12px;padding:0;}
+  .stage__tools{gap:12px;}
   .stage__themes{grid-template-columns:repeat(4,18px);}
   .stage .dock__tab{width:36px;height:36px;}
   .stage__role{flex-basis:100%;}
-  .stage__main{order:2;flex:1;padding:0;min-height:60svh;}
-  .stage__mac{display:flex;}
+  .stage__main{order:2;flex:1;display:flex;margin:0;min-height:60svh;container-type:normal;}
+  .stage__mac{display:flex;flex:1;width:auto;aspect-ratio:auto;}
   .stage__lid{flex:1;height:auto;padding:0;border-radius:0;background:none;box-shadow:none;outline:none;}
   .stage__lid::before{display:none;}
   .stage__screen{height:auto;min-height:60svh;border-radius:0;overflow:visible;background:none;}
   /* with no laptop to hold them, the lights leave the screen's rectangle and drift behind the whole page */
   .desk__lights{position:fixed;z-index:0;}
   .desk__lights i{width:86vw;}
-  .stage__top,.stage__side{position:relative;z-index:1;}
+  .stage__top,.stage__base{position:relative;z-index:1;}
   .desk{padding:26px var(--pad);justify-content:flex-start;}
   /* the folder and the text file belong to the laptop's desktop; a phone has no room for them */
   .stage .desk__files{display:none;}
@@ -1239,7 +1250,7 @@ const STAGE_CSS = `
   .stage .mu .dock__panel{grid-template-columns:minmax(0,1fr);}
   .stage .mu .dock__list{grid-column:1;grid-row:auto;}
   .ct__links li{grid-template-columns:minmax(0,1fr);gap:2px;}
-  .stage__side{order:3;flex-direction:row;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:10px 18px;padding:18px var(--pad) 26px;}
+  .stage__base{order:3;flex-direction:row;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:10px 18px;padding:18px var(--pad) 26px;}
   .stage__archive{display:inline;font-family:var(--font-body);font-size:14px;font-weight:500;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px;}
   .stage__foot{flex-basis:100%;margin:0;}
 }
