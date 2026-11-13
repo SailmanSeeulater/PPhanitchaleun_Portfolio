@@ -5,7 +5,7 @@ import { DOCK_CSS, SC_PROFILE, SoundDock } from "./sound";
 import SAILOR_TXT from "./sailor.txt?raw";
 
 // Every picture placed in src/assets/boat shows up in the "boat" folder, in file-name order.
-const BOAT_PHOTOS = Object.entries(import.meta.glob("./assets/boat/*.{jpg,jpeg,png,webp,avif,gif}", { eager: true, import: "default" }))
+const BOAT_PHOTOS = Object.entries(import.meta.glob("./assets/boat/*.{jpg,jpeg,png,webp,avif,gif,JPG,JPEG,PNG,WEBP,AVIF,GIF}", { eager: true, import: "default" }))
   .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
   .map(([path, src]) => ({ src, name: path.split("/").pop() }));
 
@@ -462,6 +462,7 @@ export default function Stage() {
   const listRef = useRef(null);
   const stageRef = useRef(null);
   const screenRef = useRef(null);
+  const appRef = useRef(null);
   const touch = useRef(null);
   useAnalytics();
 
@@ -480,13 +481,21 @@ export default function Stage() {
       const t = tile.getBoundingClientRect();
       setOrigin({ x: `${(((t.left + t.width / 2 - s.left) / s.width) * 100).toFixed(2)}%`, y: `${(((t.top + t.height / 2 - s.top) / s.height) * 100).toFixed(2)}%` });
     };
+    // The opening zoom, if it is still playing.
+    const opening = appRef.current?.getAnimations().find((a) => a.animationName === "appIn" && a.playState === "running");
     if (viewId === "home") {
       if (!appId) return;
-      from(appId);
-      setPhase("out");
+      // Closed before it finished opening: play the opening backwards from where it is, rather than
+      // jumping to full size for a frame and then shrinking.
+      if (opening) opening.playbackRate = -2;
+      else {
+        from(appId);
+        setPhase("out");
+      }
       const t = setTimeout(() => setAppId(null), 300);
       return () => clearTimeout(t);
     }
+    if (opening && viewId === appId) opening.playbackRate = 1;
     from(viewId);
     setPhase("in");
     setAppId(viewId);
@@ -738,7 +747,7 @@ export default function Stage() {
               </div>
 
               {app && (
-                <section className="app" key={app.id} data-phase={phase} aria-label={app.name}>
+                <section className="app" ref={appRef} key={app.id} data-phase={phase} aria-label={app.name}>
                   <header className="app__bar">
                     <button type="button" className="app__close" onClick={() => setViewId("home")} aria-label={`Close ${app.name}`} />
                     <p>{app.name}</p>
