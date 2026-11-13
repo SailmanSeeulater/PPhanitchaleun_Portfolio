@@ -2,6 +2,12 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AI_USAGE, DEVICON, GITHUB, EXPERIENCE, PROJECTS, SKILL_SOURCES, TECH, rich } from "./data";
 import { ArrowIcon, DownloadIcon, ProjectNotes, RESUME, VisitorCount, useAnalytics } from "./shared";
 import { DOCK_CSS, SC_PROFILE, SoundDock } from "./sound";
+import SAILOR_TXT from "./sailor.txt?raw";
+
+// Every picture placed in src/assets/boat shows up in the "boat" folder, in file-name order.
+const BOAT_PHOTOS = Object.entries(import.meta.glob("./assets/boat/*.{jpg,jpeg,png,webp,avif,gif}", { eager: true, import: "default" }))
+  .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
+  .map(([path, src]) => ({ src, name: path.split("/").pop() }));
 
 /* The Showcase site: one screen, no page scroll, and one laptop that never leaves.
    Its screen is a desktop: drifting lights and a dock of five sections. Choosing one opens it
@@ -34,6 +40,12 @@ const APPS = [
 ];
 // The top-right nav lists the five sections; Music and Résumé are reached from the dock, the record and the résumé link.
 const NAV = APPS.slice(0, 5);
+// Things lying on the desktop itself, opened the same way as the dock's apps.
+const FILES = [
+  { id: "boat", name: "boat", kind: "folder" },
+  { id: "sailor", name: "sailor.txt", kind: "text" },
+];
+const WINDOWS = [...APPS, ...FILES];
 
 // Listed under the jobs on the Experience timeline.
 const EDUCATION = {
@@ -67,7 +79,7 @@ const PROJECT_SLUGS = PROJECTS.map((p) => slugOf(p.name));
 
 function readRoute() {
   const [view, item] = window.location.hash.replace(/^#\/?/, "").split("/");
-  if (!APPS.some((a) => a.id === view)) return { view: "home", index: null };
+  if (!WINDOWS.some((a) => a.id === view)) return { view: "home", index: null };
   const index = view === "projects" ? PROJECT_SLUGS.indexOf(item) : -1;
   return { view, index: index === -1 ? null : index };
 }
@@ -290,6 +302,110 @@ function ContactApp() {
   );
 }
 
+// Small wrappers so a browser with storage turned off does not break the page.
+const stored = (key) => {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+const store = (key, value) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* storage unavailable */
+  }
+};
+
+/* ---- Desktop icons, drawn to sit beside the dock's flat tiles: a blue folder and a sheet of text ---- */
+const FolderArt = () => (
+  <svg className="fi__art" viewBox="0 0 64 54" aria-hidden="true">
+    <defs>
+      <linearGradient id="fi-back" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stopColor="#5fc0ff" />
+        <stop offset="1" stopColor="#2f9bf0" />
+      </linearGradient>
+      <linearGradient id="fi-front" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stopColor="#6fcbff" />
+        <stop offset="1" stopColor="#1f86ea" />
+      </linearGradient>
+    </defs>
+    <path d="M3 9a6 6 0 0 1 6-6h14.500a6 6 0 0 1 4.200 1.700l3.100 3.100a4 4 0 0 0 2.800 1.200H55a6 6 0 0 1 6 6v30a6 6 0 0 1-6 6H9a6 6 0 0 1-6-6z" fill="url(#fi-back)" />
+    <path d="M3 20a5 5 0 0 1 5-5h48a5 5 0 0 1 5 5v25a6 6 0 0 1-6 6H9a6 6 0 0 1-6-6z" fill="url(#fi-front)" />
+    <path d="M3.500 20a4.500 4.500 0 0 1 4.500-4.500h48a4.500 4.500 0 0 1 4.500 4.500" fill="none" stroke="#fff" strokeOpacity=".45" />
+  </svg>
+);
+const TextArt = () => (
+  <svg className="fi__art" viewBox="0 0 64 54" aria-hidden="true">
+    <path d="M17 2h22l10 10v36a4 4 0 0 1-4 4H17a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4z" fill="#fff" stroke="#c9c9c6" />
+    <path d="M39 2v7a3 3 0 0 0 3 3h7z" fill="#e9e9e6" stroke="#c9c9c6" strokeLinejoin="round" />
+    <path d="M19 20h20M19 26h24M19 32h17M19 38h22" stroke="#b9b9b5" strokeWidth="1.600" strokeLinecap="round" />
+  </svg>
+);
+
+/* ---- boat: a folder of photos. It fills itself from src/assets/boat ---- */
+function BoatFolder() {
+  if (!BOAT_PHOTOS.length)
+    return (
+      <div className="fo fo--empty">
+        <FolderArt />
+        <p>Nothing in here yet.</p>
+      </div>
+    );
+  return (
+    <div className="fo">
+      <p className="app__meta">
+        {BOAT_PHOTOS.length} {BOAT_PHOTOS.length === 1 ? "photo" : "photos"}
+      </p>
+      <ul className="fo__grid">
+        {BOAT_PHOTOS.map((photo) => (
+          <li key={photo.name}>
+            <img src={photo.src} alt="" loading="lazy" />
+            <span>{photo.name}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/* ---- sailor.txt: a text file anyone can type in. It starts as src/sailor.txt; a visitor's edits are kept
+   in their own browser only (there is no server to share them through), and Reset brings the original back. ---- */
+const SAILOR_ORIGINAL = SAILOR_TXT.replace(/\s+$/, "");
+
+function SailorText() {
+  const [text, setText] = useState(() => stored("stage-sailor") ?? SAILOR_ORIGINAL);
+  const edited = text !== SAILOR_ORIGINAL;
+  const write = (value) => {
+    setText(value);
+    if (value === SAILOR_ORIGINAL) {
+      try {
+        localStorage.removeItem("stage-sailor");
+      } catch {
+        /* storage unavailable */
+      }
+    } else store("stage-sailor", value);
+  };
+  const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+  return (
+    <div className="tx">
+      <textarea className="tx__page" value={text} onChange={(e) => write(e.target.value)} aria-label="sailor.txt" spellCheck="false" placeholder="Type something." />
+      <p className="tx__foot">
+        <span className="app__meta">
+          {words} {words === 1 ? "word" : "words"}
+          {edited ? " · edited, saved in this browser" : ""}
+        </span>
+        {edited && (
+          <button type="button" onClick={() => write(SAILOR_ORIGINAL)}>
+            Reset
+          </button>
+        )}
+      </p>
+    </div>
+  );
+}
+
 /* ---- Résumé: the PDF on the laptop screen, with the download beside it ---- */
 function ResumeApp() {
   return (
@@ -327,20 +443,6 @@ function tick(up) {
   }
 }
 
-const stored = (key) => {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-};
-const store = (key, value) => {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    /* storage unavailable */
-  }
-};
 
 export default function Stage() {
   const [theme, setTheme] = useStageTheme();
@@ -374,7 +476,7 @@ export default function Stage() {
   useEffect(() => {
     const screen = screenRef.current;
     const from = (id) => {
-      const tile = screen?.querySelector(`[data-app="${id}"] .dk__tile`);
+      const tile = screen?.querySelector(`[data-app="${id}"] :is(.dk__tile,.fi__art)`);
       if (!tile) return;
       const s = screen.getBoundingClientRect();
       const t = tile.getBoundingClientRect();
@@ -532,7 +634,7 @@ export default function Stage() {
     if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(t.clientY - from.y) * 1.6) setIndex((i) => (i + (dx < 0 ? 1 : -1) + PROJECTS.length) % PROJECTS.length);
   };
 
-  const app = APPS.find((a) => a.id === appId);
+  const app = WINDOWS.find((a) => a.id === appId);
   const hinting = { onPointerLeave: () => setHint(null), onBlur: () => setHint(null) };
 
   return (
@@ -610,6 +712,16 @@ export default function Stage() {
                   <i />
                   <i />
                 </div>
+                <ul className="desk__files" aria-label="On the desktop">
+                  {FILES.map((f) => (
+                    <li key={f.id} data-app={f.id}>
+                      <button type="button" onClick={() => setViewId(f.id)} data-umami-event={`desktop-${f.id}`}>
+                        {f.kind === "folder" ? <FolderArt /> : <TextArt />}
+                        <b>{f.name}</b>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
                 <nav className="dk" aria-label="Sections">
                   {nudge && <p className="dk__nudge">Pick one to open it</p>}
                   <ul className="dk__dock">
@@ -641,6 +753,8 @@ export default function Stage() {
                     {app.id === "contact" && <ContactApp />}
                     {app.id === "music" && <div className="mu" ref={setMusicSlot} />}
                     {app.id === "resume" && <ResumeApp />}
+                    {app.id === "boat" && <BoatFolder />}
+                    {app.id === "sailor" && <SailorText />}
                   </div>
                 </section>
               )}
@@ -816,6 +930,45 @@ const STAGE_CSS = `
 @keyframes lavaA{0%{translate:0 0;scale:1;}30%{translate:46% -52%;scale:1.2;}62%{translate:92% -8%;scale:.86;}100%{translate:28% -78%;scale:1.1;}}
 @keyframes lavaB{0%{translate:0 0;scale:1;}28%{translate:-52% 62%;scale:.88;}60%{translate:38% 96%;scale:1.22;}100%{translate:66% 30%;scale:1;}}
 @keyframes lavaC{0%{translate:0 0;scale:1;}34%{translate:-70% -58%;scale:1.16;}66%{translate:-118% 14%;scale:.9;}100%{translate:-34% -30%;scale:1.12;}}
+/* things on the desktop: a column down the right edge, the way a Mac stacks them */
+.stage .desk__files{
+  position:absolute;z-index:1;top:clamp(14px,2.2vw,30px);right:clamp(14px,2.2vw,30px);
+  list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:clamp(8px,1.2vw,16px);
+}
+.desk__files button{
+  display:flex;flex-direction:column;align-items:center;gap:5px;width:clamp(78px,7vw,96px);padding:6px 4px 5px;
+  border:none;border-radius:10px;background:none;cursor:pointer;transition:background .2s var(--ease);
+}
+.fi__art{width:clamp(48px,4.6vw,62px);height:auto;filter:drop-shadow(0 6px 8px color-mix(in srgb,var(--shadow) 22%,transparent));transition:scale .25s var(--ease);}
+.desk__files b{
+  max-width:100%;padding:1px 7px;border-radius:5px;font-weight:500;font-size:clamp(11.5px,1vw,13px);line-height:1.35;
+  overflow-wrap:anywhere;text-align:center;transition:background .2s var(--ease),color .2s var(--ease);
+}
+.desk__files button:is(:hover,:focus-visible){background:color-mix(in srgb,var(--text) 8%,transparent);}
+.desk__files button:is(:hover,:focus-visible) b{background:#1f86ea;color:#fff;}
+.desk__files button:active .fi__art{scale:.93;}
+
+/* boat */
+.fo{display:flex;flex-direction:column;}
+.fo--empty{align-items:center;justify-content:center;gap:14px;color:var(--muted);font-size:15px;}
+.fo--empty .fi__art{width:92px;opacity:.5;filter:saturate(.6);}
+.fo--empty p{margin:0;}
+.stage .fo__grid{list-style:none;margin:16px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(120px,14vw,190px),1fr));gap:clamp(12px,1.6vw,22px);}
+.fo__grid li{display:flex;flex-direction:column;gap:7px;min-width:0;}
+.fo__grid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;background:var(--surface);display:block;}
+.fo__grid span{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;}
+
+/* sailor.txt */
+.tx{display:flex;flex-direction:column;gap:12px;max-width:760px;margin:0 auto;width:100%;}
+.tx__page{
+  flex:1;min-height:180px;width:100%;margin:0;padding:0;border:none;outline:none;resize:none;background:none;color:var(--text);
+  caret-color:var(--text);font-family:var(--mono);font-size:15px;line-height:1.7;
+}
+.tx__page::placeholder{color:color-mix(in srgb,var(--text) 35%,transparent);}
+.tx__foot{margin:0;display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:30px;}
+.tx__foot button{padding:6px 14px;border:none;border-radius:999px;background:var(--surface);font-size:13px;cursor:pointer;transition:background .2s var(--ease),color .2s var(--ease);}
+.tx__foot button:hover{background:var(--text);color:var(--bg);}
+
 .dk{position:relative;z-index:1;margin-top:auto;display:flex;flex-direction:column;align-items:center;}
 .stage .dk__dock{
   list-style:none;margin:0;padding:clamp(10px,1.1vw,14px);display:flex;gap:clamp(8px,1.2vw,16px);border-radius:clamp(22px,2.4vw,30px);
@@ -1005,7 +1158,7 @@ const STAGE_CSS = `
 .stage[data-intro] .stage__mac{z-index:30;animation:macTravel 1.65s cubic-bezier(.7,0,.2,1) both;}
 .stage[data-intro] .stage__lid{animation:lidOpen 1.65s cubic-bezier(.3,.9,.3,1) both;}
 .stage[data-intro] .desk{animation:screenOn 1.65s linear both;}
-.stage[data-intro] .dk{animation:introIn .5s var(--ease) 1.15s both;}
+.stage[data-intro] :is(.dk,.desk__files){animation:introIn .5s var(--ease) 1.15s both;}
 .stage[data-intro] .stage__deck{
   display:block;position:absolute;left:-4%;right:-4%;top:100%;height:13px;border-radius:2px 2px 16px 16px;
   background:linear-gradient(#d2d2cf,#b3b3b0);animation:deckOut 1.65s linear both;
@@ -1018,6 +1171,8 @@ const STAGE_CSS = `
 @keyframes deckOut{0%,58%{opacity:1;}90%,100%{opacity:0;}}
 @keyframes introIn{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:none;}}
 
+/* a squeezed window: the desktop column would crowd the dock, so it steps out */
+@media (max-height:560px),(max-width:900px){.stage .desk__files{display:none;}}
 /* short windows: tighten the header so the laptop keeps its height */
 @media (max-height:760px){
   .stage__top{padding-top:16px;padding-bottom:14px;}
@@ -1052,6 +1207,8 @@ const STAGE_CSS = `
   .stage__lid::before{display:none;}
   .stage__screen{height:auto;min-height:60svh;border-radius:0;}
   .desk{padding:26px var(--pad);justify-content:flex-start;}
+  /* the folder and the text file belong to the laptop's desktop; a phone has no room for them */
+  .stage .desk__files{display:none;}
   .dk{margin:0;align-self:stretch;align-items:stretch;}
   .stage .dk__dock{
     display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px 6px;padding:0;border-radius:0;
