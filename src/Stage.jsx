@@ -929,6 +929,10 @@ const STAGE_CSS = `
 .stage__lid::before{content:"";position:absolute;z-index:1;top:3.5px;left:50%;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:#3a3a3d;}
 .stage__deck{display:none;}
 .stage__screen{position:relative;height:100%;border-radius:8px;overflow:hidden;background:var(--bg);isolation:isolate;font-family:var(--font-body);color:var(--text);}
+/* Safari can drop the screen's own background for a few frames while an app zooms in or out (the blurred
+   lights and the dock's backdrop blur are layers of their own), and the dark bezel shows through. The same
+   colour painted again on a layer of its own stays put. */
+.stage__screen::before{content:"";position:absolute;inset:0;z-index:-1;background:var(--bg);transform:translateZ(0);pointer-events:none;}
 
 /* ---- the desktop: three lights drifting like a lava lamp, and the dock ---- */
 .desk{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;padding:clamp(16px,2.6vw,38px);}
@@ -1215,6 +1219,7 @@ const STAGE_CSS = `
   .stage__lid{flex:1;height:auto;padding:0;border-radius:0;background:none;box-shadow:none;outline:none;}
   .stage__lid::before{display:none;}
   .stage__screen{height:auto;min-height:60svh;border-radius:0;overflow:visible;background:none;}
+  .stage__screen::before{display:none;}
   /* with no laptop to hold them, the lights leave the screen's rectangle and drift behind the whole page */
   .desk__lights{position:fixed;z-index:0;}
   .desk__lights i{width:86vw;}
