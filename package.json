@@ -9,7 +9,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "usage": "node scripts/ai-usage.mjs",
-    "resume": "swift scripts/resume-image.swift ."
+    "resume": "swift scripts/resume-image.swift .",
+    "og": "swift scripts/og-image.swift http://localhost:5199/ public/og.jpg"
   },
   "dependencies": {
     "react": "^19.2.8",

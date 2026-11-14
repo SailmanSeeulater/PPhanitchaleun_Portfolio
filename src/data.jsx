@@ -25,12 +25,15 @@ const EXPERIENCE = [
   {
     role: "Founding Engineer",
     org: "Stealth Startup",
-    about: "Coming soon...",
+    about: "backend and LLM pipelines",
     meta: ["Sep 2026 to Present", "San Diego, CA"],
     bullets: [
-      "**67 to the flow state**"
+      "Built the document and LinkedIn import pipeline: PDF and Word uploads parsed in **background Celery jobs**, LLM extraction that **drops any entry the source doesn't state**, and a review screen to fix, dedupe, and apply entries.",
+      "Designed the stored account profile as **Pydantic-validated JSON**, with an endpoint reporting each field as ready, pending, or unavailable, plus GitHub-derived project records.",
+      "Built data-rights features: **data export, account deletion**, and auto-expiry of uploaded files and stale imports.",
+      "Contributed about **82 commits** (+23.3k lines) and **148 backend tests** to the FastAPI and Next.js codebase.",
     ],
-    stack: ["67"],
+    stack: ["Python", "FastAPI", "Celery", "Pydantic", "LLM pipelines", "Next.js"],
   },
   {
     role: "Web Developer Intern",
