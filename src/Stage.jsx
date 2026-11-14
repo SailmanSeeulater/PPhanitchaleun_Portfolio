@@ -155,36 +155,102 @@ function useStageTheme() {
   return [id, setId];
 }
 
-/* ---- Projects: names on the left, the screenshot in the middle, the write-up on the right ---- */
-function ProjectsApp({ index, setIndex, listRef }) {
-  const project = PROJECTS[index];
+/* ---- Projects, in three layers. First every project at once, as a grid of wide cards. Picking one opens the
+   reel: that demo in the middle, its neighbours peeking in from the sides. Picking the demo opens it up: the
+   picture on the left, the write-up and the tools on the right. Escape steps back one layer at a time, and
+   from the grid it closes the window. ---- */
+const two = (n) => String(n).padStart(2, "0");
+
+function ProjectsApp({ index, setIndex, layer, setLayer }) {
   const count = PROJECTS.length;
+  const project = PROJECTS[index];
+  const at = (d) => (index + d + count) % count;
+
+  if (layer === "grid")
+    return (
+      <ol className="pj pj--grid" aria-label="Projects">
+        {PROJECTS.map((p, i) => (
+          <li key={p.name}>
+            <button
+              type="button"
+              onClick={() => {
+                setIndex(i);
+                setLayer("reel");
+              }}
+              data-umami-event="project-preview"
+              data-umami-event-project={p.name}
+            >
+              <span className="pj__thumb">
+                <img src={p.demo.image} alt="" loading="lazy" />
+              </span>
+              <b>{p.name}</b>
+              <i>{p.kind}</i>
+            </button>
+          </li>
+        ))}
+      </ol>
+    );
+
+  // The strip above the reel and the opened project: the way back, where you are, and the step buttons.
+  const bar = (
+    <p className="pj__bar">
+      <button type="button" onClick={() => setLayer(layer === "detail" ? "reel" : "grid")}>
+        {layer === "detail" ? "Back" : "All projects"}
+      </button>
+      <span>
+        {two(index + 1)} / {two(count)}
+      </span>
+      <span className="pj__ctl">
+        <button type="button" onClick={() => setIndex(at(-1))} aria-label="Previous project">
+          <ArrowIcon />
+        </button>
+        <button type="button" onClick={() => setIndex(at(1))} aria-label="Next project">
+          <ArrowIcon />
+        </button>
+      </span>
+    </p>
+  );
+
+  if (layer === "reel")
+    return (
+      <div className="pj pj--reel">
+        {bar}
+        <div className="pj__row">
+          <button type="button" className="pj__peek" onClick={() => setIndex(at(-1))} aria-label={`Previous: ${PROJECTS[at(-1)].name}`}>
+            <img src={PROJECTS[at(-1)].demo.image} alt="" />
+          </button>
+          <button type="button" className="pj__focus" key={project.name} onClick={() => setLayer("detail")} aria-label={`Open ${project.name}`} data-umami-event="project-open" data-umami-event-project={project.name}>
+            <img src={project.demo.image} alt={`${project.name} screenshot`} />
+            <span className="pj__tag">{project.demo.domain}</span>
+          </button>
+          <button type="button" className="pj__peek" onClick={() => setIndex(at(1))} aria-label={`Next: ${PROJECTS[at(1)].name}`}>
+            <img src={PROJECTS[at(1)].demo.image} alt="" />
+          </button>
+        </div>
+        <div className="pj__cap" key={project.name}>
+          <h2 className="app__title">
+            {project.name} <small>{project.kind}</small>
+          </h2>
+          <p>{project.summary}</p>
+        </div>
+        <ol className="pj__dots" aria-label="Projects">
+          {PROJECTS.map((p, i) => (
+            <li key={p.name}>
+              <button type="button" aria-current={i === index ? "true" : undefined} onClick={() => setIndex(i)} aria-label={p.name} />
+            </li>
+          ))}
+        </ol>
+      </div>
+    );
+
   // A deployed project's screenshot is a link to the live app; the rest are plain pictures.
   const Shot = project.live ? "a" : "div";
   const shotLink = project.live
     ? { href: project.live, target: "_blank", rel: "noreferrer", "aria-label": `Open ${project.name} live`, "data-umami-event": "project-live", "data-umami-event-project": project.name }
     : {};
   return (
-    <div className="pj">
-      <div className="pj__side">
-        <ol className="pj__list" aria-label="Projects" ref={listRef}>
-          {PROJECTS.map((p, i) => (
-            <li key={p.name}>
-              <button type="button" aria-current={i === index ? "true" : undefined} onClick={() => setIndex(i)} data-umami-event="project-preview" data-umami-event-project={p.name}>
-                {p.name}
-              </button>
-            </li>
-          ))}
-        </ol>
-        <div className="pj__ctl">
-          <button type="button" onClick={() => setIndex((index - 1 + count) % count)} aria-label="Previous project">
-            <ArrowIcon />
-          </button>
-          <button type="button" onClick={() => setIndex((index + 1) % count)} aria-label="Next project">
-            <ArrowIcon />
-          </button>
-        </div>
-      </div>
+    <div className="pj pj--detail">
+      {bar}
       <Shot className="pj__shot" style={{ "--pan": `${Math.max(4, project.demo.height / 240).toFixed(1)}s` }} {...shotLink}>
         <img key={project.name} src={project.demo.image} alt={`${project.name} screenshot`} />
         <span className="pj__tag">
@@ -204,44 +270,131 @@ function ProjectsApp({ index, setIndex, listRef }) {
   );
 }
 
-/* ---- Experience: one line down the page, newest at the top, a dot for each stop ---- */
+/* ---- Experience: two transit lines, work and school, running left to right across the months, each stop a
+   station placed by its real date. School runs under both jobs, which a single line can't show. What's ahead
+   of today is dotted. Picking a station shows that stop underneath. On a phone, where there's no room for a
+   map, the stops are simply listed, each marked with its line's colour. ---- */
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+// Reads the dates as they're written in the data ("Sep 2026 to Present", "Jul to Aug 2026", "Aug 2025 to
+// Jun 2027") into months counted from year zero. "to" is null for a stop that is still going.
+function spanOf(text) {
+  const [a, b = ""] = text.split(/\s+to\s+/i);
+  const read = (t) => ({ month: MONTHS.findIndex((m) => t.trim().toLowerCase().startsWith(m.toLowerCase())), year: Number(t.match(/\d{4}/)?.[0]) || null });
+  const start = read(a);
+  const end = /present/i.test(b) ? null : read(b);
+  return { from: (start.year ?? end?.year) * 12 + start.month, to: end ? end.year * 12 + end.month : null };
+}
+const monthLabel = (m) => `${MONTHS[m % 12]} ${Math.floor(m / 12)}`;
+const STOPS = [...EXPERIENCE.map((s) => ({ ...s, track: "work" })), { ...EDUCATION, track: "school" }].map((s) => ({ ...s, ...spanOf(s.meta[0]) }));
+const LINES = [
+  { id: "work", name: "Work line", y: 56 },
+  { id: "school", name: "School line", y: 122 },
+];
+
 function ExperienceApp() {
-  const stops = [...EXPERIENCE, EDUCATION];
+  const [pick, setPick] = useState(0);
+  const [width, setWidth] = useState(900);
+  const [today] = useState(() => new Date().getFullYear() * 12 + new Date().getMonth());
+  const boxRef = useRef(null);
+  // The map is drawn at the window's real width, so its type stays the same size whatever the window's.
+  useLayoutEffect(() => {
+    const watch = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    watch.observe(boxRef.current);
+    return () => watch.disconnect();
+  }, []);
+
+  const first = Math.min(...STOPS.map((s) => s.from));
+  const last = Math.max(today + 2, ...STOPS.map((s) => s.to ?? today));
+  const x = (m) => 12 + ((m - first) / (last - first)) * (width - 24);
+
   return (
-    <ol className="tl">
-      {stops.map((job) => {
-        const [when, ...where] = job.meta;
-        return (
-          <li key={job.role} className={/present/i.test(when) ? "is-now" : undefined}>
-            <p className="tl__when">
-              {when}
-              <span>{where.join(" · ")}</span>
-            </p>
-            <span className="tl__dot" aria-hidden="true" />
-            <article>
-              <h2 className="app__title">{job.role}</h2>
-              <p className="app__lead">
-                <strong>{job.org}</strong> · {job.about}
+    <div className="mt" ref={boxRef}>
+      <svg className="mt__map" width={width} height="168" role="group" aria-label="Work and school as two lines through time">
+        <line className="mt__today" x1={x(today)} y1="8" x2={x(today)} y2="160" />
+        <text className="mt__small" x={x(today) + 6} y="160">
+          today
+        </text>
+        {LINES.map((line) => {
+          const stops = STOPS.map((s, k) => ({ ...s, k })).filter((s) => s.track === line.id);
+          if (!stops.length) return null;
+          const start = Math.min(...stops.map((s) => s.from));
+          const open = stops.some((s) => s.to === null);
+          const end = open ? last : Math.max(...stops.map((s) => s.to));
+          // A station where each stop begins; a stop on the school line also gets one where it ends.
+          const stations = stops
+            .flatMap((s) => [
+              { k: s.k, at: s.from, name: line.id === "school" ? s.org : s.role, sub: monthLabel(s.from) },
+              ...(line.id === "school" && s.to !== null ? [{ k: s.k, at: s.to, name: s.role, sub: `${monthLabel(s.to)}${s.to > today ? ", expected" : ""}` }] : []),
+            ])
+            .sort((p, q) => p.at - q.at);
+          return (
+            <g key={line.id} className={`mt__line mt__line--${line.id}`}>
+              <path d={`M${x(start)} ${line.y}H${x(Math.min(end, today))}`} />
+              {end > today && <path className="mt__ahead" d={`M${x(today)} ${line.y}H${x(end)}`} />}
+              <text className="mt__name" x={x(start)} y={line.y + 24}>
+                {line.name}
+              </text>
+              {stations.map((st, i) => {
+                // The name sits to the right of its station, unless the next station or the edge is too close.
+                const next = stations[i + 1];
+                const left = (next && x(next.at) - x(st.at) < 180) || x(st.at) > width - 190;
+                const label = { x: x(st.at) + (left ? 7 : -7), textAnchor: left ? "end" : "start" };
+                return (
+                  <g
+                    key={`${st.k}-${st.at}`}
+                    className={st.k === pick ? "mt__stop is-on" : "mt__stop"}
+                    onClick={() => setPick(st.k)}
+                    onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setPick(st.k)}
+                    tabIndex={0}
+                    role="button"
+                    aria-pressed={st.k === pick}
+                    aria-label={`${st.name}, ${st.sub}`}
+                  >
+                    <circle cx={x(st.at)} cy={line.y} r="7" />
+                    <text {...label} y={line.y - 27}>
+                      {st.name}
+                    </text>
+                    <text className="mt__small" {...label} y={line.y - 13}>
+                      {st.sub}
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
+          );
+        })}
+      </svg>
+      <div className="mt__stops">
+        {STOPS.map((s, k) => {
+          const [when, ...where] = s.meta;
+          return (
+            <article key={s.role} className={k === pick ? "is-on" : undefined} data-track={s.track}>
+              <p className="app__meta">
+                {when} · {where.join(" · ")}
               </p>
-              {job.bullets.length > 0 && (
+              <h2 className="app__title">{s.role}</h2>
+              <p className="app__lead">
+                <strong>{s.org}</strong> · {s.about}
+              </p>
+              {s.bullets.length > 0 && (
                 <ul className="bullets app__bullets">
-                  {job.bullets.map((b, k) => (
-                    <li key={k}>{rich(b)}</li>
+                  {s.bullets.map((b, i) => (
+                    <li key={i}>{rich(b)}</li>
                   ))}
                 </ul>
               )}
-              {job.stack.length > 0 && (
-                <ul className="project__stack" aria-label={`${job.role} tech stack`}>
-                  {job.stack.map((t) => (
+              {s.stack.length > 0 && (
+                <ul className="project__stack" aria-label={`${s.role} tech stack`}>
+                  {s.stack.map((t) => (
                     <li key={t}>{t}</li>
                   ))}
                 </ul>
               )}
             </article>
-          </li>
-        );
-      })}
-    </ol>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -376,7 +529,7 @@ function WelcomeApp({ go }) {
     <div className="wl">
       <p className="app__meta">Welcome</p>
       <h2 className="app__title">Hi, I'm Perfect Phanitchaleun.</h2>
-      <p className="app__lead">This is my portfolio website. Please feel free to interact with it like you would with your laptop.</p>
+      <p className="app__lead">This is my portfolio website. Please feel free to interact with it, like you would with your laptop.</p>
       <p className="wl__go">
         <button type="button" onClick={() => go("projects")} data-umami-event="welcome-projects">
           See the projects
@@ -691,16 +844,21 @@ export default function Stage() {
   const maxWin = (id) => setWins((ws) => ws.map((w) => (w.id === id ? { ...w, max: !w.max } : w)));
   const closeWin = (id) => setWins((ws) => ws.map((w) => (w.id === id ? { ...w, closing: true } : w)));
   const closeAll = () => setWins((ws) => ws.map((w) => ({ ...w, closing: true })));
-  const dropWin = (id) => setWins((ws) => ws.filter((w) => !(w.id === id && w.closing)));
+  const dropWin = (id) => {
+    setWins((ws) => ws.filter((w) => !(w.id === id && w.closing)));
+    // Projects goes back to its grid once its window has gone, so that's where it opens next time.
+    if (id === "projects") setLayer("grid");
+  };
   // Projects reopens on the project that was last on screen, even on a later visit.
   const [index, setIndex] = useState(() => readRoute().index ?? Math.max(0, PROJECT_SLUGS.indexOf(stored("stage-project"))));
+  // Which of Projects' three layers is showing. A link straight to one project opens it up.
+  const [layer, setLayer] = useState(() => (readRoute().view === "projects" && readRoute().index !== null ? "detail" : "grid"));
   // A first-time visitor gets one quiet line above the dock until they open something.
   const [nudge, setNudge] = useState(() => stored("stage-nudge") !== "1" && readRoute().view === "home");
   const [musicSlot, setMusicSlot] = useState(null);
   const openCount = useRef(null);
   const [hint, setHint] = useState(null);
   const lastView = useRef(null);
-  const listRef = useRef(null);
   const stageRef = useRef(null);
   const screenRef = useRef(null);
   const touch = useRef(null);
@@ -812,14 +970,14 @@ export default function Stage() {
   // Keep the address in step with the window in front. Opening the first window adds a history entry; everything
   // after that (another window, the next project) replaces it, so "back" returns to the bare desktop.
   useEffect(() => {
-    const target = viewId === "home" ? "" : viewId === "projects" ? `#/projects/${PROJECT_SLUGS[index]}` : `#/${viewId}`;
+    const target = viewId === "home" ? "" : viewId === "projects" && layer !== "grid" ? `#/projects/${PROJECT_SLUGS[index]}` : `#/${viewId}`;
     const first = lastView.current === null;
     if (window.location.hash !== target) {
       const write = !first && lastView.current === "home" ? "pushState" : "replaceState";
       window.history[write](null, "", target || window.location.pathname + window.location.search);
     }
     lastView.current = viewId;
-  }, [viewId, index]);
+  }, [viewId, index, layer]);
 
   useEffect(() => {
     const sync = () => {
@@ -828,6 +986,7 @@ export default function Stage() {
       if (route.view === "home") closeAll();
       else openWin(route.view);
       if (route.index !== null) setIndex(route.index);
+      if (route.view === "projects") setLayer(route.index !== null ? "detail" : "grid");
     };
     window.addEventListener("popstate", sync);
     window.addEventListener("hashchange", sync);
@@ -837,29 +996,23 @@ export default function Stage() {
     };
   }, []);
 
-  // Escape closes the window in front. When that is Projects, the arrow keys step through the projects.
+  // Escape closes the window in front. In Projects it first steps back a layer (the opened project, then the
+  // reel, then the grid), and while a project is showing the arrow keys step through them.
   useEffect(() => {
     if (viewId === "home" || menu) return;
     const onKey = (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.("input,textarea,select,.dock")) return;
-      if (e.key === "Escape") return closeWin(viewId);
-      if (viewId !== "projects") return;
+      const inProject = viewId === "projects" && layer !== "grid";
+      if (e.key === "Escape") return inProject ? setLayer(layer === "detail" ? "reel" : "grid") : closeWin(viewId);
+      if (!inProject) return;
       const d = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : 0;
       if (!d) return;
       e.preventDefault();
-      // The pointer may still be resting on the name that was clicked: mute hover until it moves again,
-      // so the only name that looks selected is the one on screen.
-      listRef.current?.setAttribute("data-keys", "");
       setIndex((i) => (i + d + PROJECTS.length) % PROJECTS.length);
     };
-    const onMove = () => listRef.current?.removeAttribute("data-keys");
     window.addEventListener("keydown", onKey);
-    window.addEventListener("pointermove", onMove);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("pointermove", onMove);
-    };
-  }, [viewId, menu]);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [viewId, menu, layer]);
 
   // A menu closes on a click anywhere else, or on Escape.
   useEffect(() => {
@@ -888,13 +1041,7 @@ export default function Stage() {
     return () => (window.cancelIdleCallback ? window.cancelIdleCallback(idle) : clearTimeout(idle));
   }, []);
 
-  // Keyboard focus follows the selection, so the focus ring never sits on a different name than the highlight.
-  useEffect(() => {
-    const list = listRef.current;
-    if (list?.contains(document.activeElement)) list.querySelector("[aria-current]")?.focus({ preventScroll: true });
-  }, [index]);
-
-  // A sideways swipe in Projects flips to the next or previous one.
+  // A sideways swipe on a project flips to the next or previous one.
   const onTouchStart = (e) => {
     const t = e.touches[0];
     touch.current = { x: t.clientX, y: t.clientY };
@@ -902,7 +1049,7 @@ export default function Stage() {
   const onTouchEnd = (e) => {
     const from = touch.current;
     touch.current = null;
-    if (!from || viewId !== "projects") return;
+    if (!from || viewId !== "projects" || layer === "grid") return;
     const t = e.changedTouches[0];
     const dx = t.clientX - from.x;
     if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(t.clientY - from.y) * 1.6) setIndex((i) => (i + (dx < 0 ? 1 : -1) + PROJECTS.length) % PROJECTS.length);
@@ -959,6 +1106,7 @@ export default function Stage() {
     } else if (node.kind === "project" || node.project !== undefined) {
       setIndex(node.index ?? node.project);
       openWin("projects");
+      setLayer("detail");
     } else if (node.app) openWin(node.app);
     else if (node.href) window.open(node.href, "_blank", "noopener");
   };
@@ -1006,7 +1154,7 @@ export default function Stage() {
   const bodyOf = (id) => {
     switch (id) {
       case "projects":
-        return <ProjectsApp index={index} setIndex={setIndex} listRef={listRef} />;
+        return <ProjectsApp index={index} setIndex={setIndex} layer={layer} setLayer={setLayer} />;
       case "experience":
         return <ExperienceApp />;
       case "about":
@@ -1764,11 +1912,16 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
   transform-origin:calc(var(--ox,50%) - var(--win-l) - var(--dx,0px)) calc(var(--oy,100%) - var(--win-t) - var(--dy,0px));
   animation:appIn .5s cubic-bezier(.2,.85,.2,1) both;transition:inset .28s var(--ease);outline:none;
 }
+/* a window takes the keyboard when it comes forward, but it's a place to work in, not a control: no focus ring */
+.stage .app:focus-visible{outline:none;}
 /* the window in front casts the deeper shadow; the ones behind it grey their lights, like a Mac's */
 .app[data-front]{box-shadow:0 0 0 .5px color-mix(in srgb,var(--text) 26%,transparent),0 34px 70px -22px color-mix(in srgb,var(--shadow) 65%,transparent);}
 .app:not([data-front]) :is(.app__close,.app__min,.app__max){background:rgba(140,140,140,.5);}
 /* the five sections hold more, so their window is wider and taller */
-.app[data-wide]{--win-t:calc(var(--mb) + clamp(6px,.8vw,12px));--win-l:clamp(14px,3.2vw,60px);}
+.app[data-wide]{
+  --win-t:calc(var(--mb) + clamp(6px,.8vw,12px));--win-l:clamp(14px,3.2vw,60px);
+  inset:var(--win-t) var(--win-l) calc(var(--desk-pad) + var(--ic) * 1.34 + 18px);
+}
 /* green: the window takes the whole screen between the menu bar and the dock */
 .stage .app[data-max]{--win-t:var(--mb);--win-l:0px;--win-r:0px;inset:var(--mb) 0 calc(var(--desk-pad) + var(--ic) * 1.34 + 10px);}
 .app[data-phase="out"]{animation:appOut .3s cubic-bezier(.55,0,.85,.35) both;}
@@ -1872,20 +2025,56 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
 .stage .project__stack li{border-radius:999px;}
 .stage .hl{background:transparent;color:inherit;padding:0;margin:0;font-weight:700;box-shadow:none;}
 
-/* Projects */
-.pj{display:grid;grid-template-columns:clamp(130px,13vw,190px) minmax(0,1.2fr) minmax(0,1fr);gap:clamp(18px,2.6vw,40px);height:100%;}
-.pj__side{display:flex;flex-direction:column;justify-content:space-between;min-width:0;}
-.stage .pj__list{list-style:none;margin:0;padding:0;}
-.pj__list button{
-  display:block;padding:2px 0;border:none;background:none;cursor:pointer;text-align:left;
-  font-family:var(--font-display);font-size:clamp(17px,1.6vw,23px);letter-spacing:-.015em;line-height:1.2;
-  color:color-mix(in srgb,var(--text) 30%,var(--bg));transition:color .25s var(--ease);
+/* Projects: three layers in one window. It gets a little more of the window than the other sections. */
+.app[data-id="projects"] .app__body{padding:clamp(12px,1.5vw,20px) clamp(16px,2.2vw,30px) clamp(16px,2vw,26px);}
+.pj{height:100%;min-height:0;}
+/* layer one: every project, as wide cards that share the window between them */
+.stage .pj--grid{
+  list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:minmax(0,1fr);
+  gap:clamp(10px,1.2vw,16px) clamp(12px,1.5vw,22px);
 }
-.pj__list:not([data-keys]) button:hover{color:color-mix(in srgb,var(--text) 62%,var(--bg));}
-.pj__list button[aria-current]{color:var(--text);}
-.pj__ctl{display:flex;gap:8px;margin-top:18px;}
+.pj--grid li{display:flex;min-height:0;min-width:0;}
+.pj--grid button{
+  flex:1;min-width:0;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:minmax(0,1fr) auto;align-items:baseline;gap:7px 10px;
+  padding:0;border:none;background:none;cursor:pointer;text-align:left;
+}
+.pj__thumb{grid-column:1/-1;align-self:stretch;min-height:0;border-radius:10px;overflow:hidden;background:#161617;transition:translate .25s var(--ease),box-shadow .25s var(--ease);}
+.pj__thumb img{display:block;width:100%;height:100%;object-fit:cover;object-position:top;}
+.pj--grid b{font-family:var(--font-display);font-weight:400;font-size:clamp(15px,1.4vw,20px);letter-spacing:-.012em;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pj--grid i{font-family:var(--mono);font-style:normal;font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);white-space:nowrap;}
+.pj--grid button:is(:hover,:focus-visible) .pj__thumb{translate:0 -3px;box-shadow:0 16px 28px -18px color-mix(in srgb,var(--shadow) 75%,transparent);}
+.pj--grid button:active .pj__thumb{translate:0 0;}
+/* the strip over layers two and three: the way back, where you are, and the step buttons */
+.pj__bar{flex:none;align-self:stretch;margin:0 0 clamp(8px,1.1vw,14px);display:flex;align-items:center;gap:12px;}
+.pj__bar > button{padding:6px 13px;border:none;border-radius:999px;background:var(--surface);cursor:pointer;font-size:13px;transition:background .2s var(--ease),color .2s var(--ease);}
+.pj__bar > button::before{content:"← ";}
+.pj__bar > button:hover{background:var(--text);color:var(--bg);}
+.pj__bar > span:first-of-type{margin-left:auto;font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;color:var(--muted);}
+/* layer two: the reel. The chosen demo in the middle, the ones either side dimmed and cut off by the window. */
+.pj--reel{display:flex;flex-direction:column;align-items:center;overflow:hidden;text-align:center;}
+.pj__row{flex:1;min-height:0;align-self:stretch;display:flex;align-items:center;justify-content:center;gap:clamp(12px,1.8vw,24px);}
+.pj__row button{position:relative;flex:none;height:100%;aspect-ratio:16/10;padding:0;border:none;border-radius:12px;overflow:hidden;background:#161617;cursor:pointer;}
+.pj__row img{display:block;width:100%;height:100%;object-fit:cover;object-position:top;}
+.pj__row .pj__peek{height:66%;opacity:.38;transition:opacity .25s var(--ease);}
+.pj__row .pj__peek:is(:hover,:focus-visible){opacity:.7;}
+.pj__focus{cursor:zoom-in;box-shadow:0 24px 46px -28px color-mix(in srgb,var(--shadow) 80%,transparent);animation:reelIn .4s var(--ease);transition:scale .25s var(--ease);}
+.pj__focus:is(:hover,:focus-visible){scale:1.012;}
+@keyframes reelIn{from{opacity:0;transform:scale(.94);}to{opacity:1;transform:none;}}
+.pj__cap{flex:none;margin-top:clamp(10px,1.3vw,18px);animation:rise .4s var(--ease);}
+.pj__cap .app__title{margin:0;font-size:clamp(24px,2.5vw,36px);}
+.pj__cap small{margin-left:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);vertical-align:middle;}
+.pj__cap p{max-width:640px;margin:8px auto 0;font-size:clamp(13.5px,1.1vw,15px);line-height:1.4;color:var(--muted);}
+.stage .pj__dots{flex:none;list-style:none;margin:clamp(8px,1vw,14px) 0 0;padding:0;display:flex;gap:7px;}
+.pj__dots button{display:block;width:7px;height:7px;padding:0;border:none;border-radius:50%;background:color-mix(in srgb,var(--text) 22%,transparent);cursor:pointer;}
+.pj__dots [aria-current]{background:var(--text);}
+/* layer three: the project opened up. The picture, still wider than it is tall, and the write-up beside it. */
+.pj--detail{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);column-gap:clamp(18px,2.6vw,38px);}
+.pj--detail .pj__bar{grid-column:1/-1;}
+.pj--detail .pj__shot{align-self:start;aspect-ratio:16/10;max-height:100%;animation:reelIn .4s var(--ease);}
+.pj--detail .app__title{margin-top:8px;}
+.pj__ctl{display:flex;gap:6px;}
 .pj__ctl button{
-  display:grid;place-items:center;width:38px;height:38px;padding:0;border-radius:50%;cursor:pointer;
+  display:grid;place-items:center;width:32px;height:32px;padding:0;border-radius:50%;cursor:pointer;
   border:none;background:var(--surface);transition:background .2s var(--ease),color .2s var(--ease),scale .2s var(--ease);
 }
 .pj__ctl button:hover{background:var(--text);color:var(--bg);}
@@ -1916,29 +2105,29 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
 .pj__notes .notes__credit{margin:10px 0 0;font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);}
 .pj__notes .bullets{margin-top:16px;}
 
-/* Experience: a timeline. Dates on the left, one line down the middle, a dot at each stop */
-.stage .tl{
-  position:relative;list-style:none;margin:0 auto;padding:0;max-width:980px;
-  display:flex;flex-direction:column;justify-content:center;gap:clamp(16px,2vw,26px);
-}
-.tl::before{
-  content:"";position:absolute;left:calc(clamp(110px,14vw,176px) + 20px);top:10px;bottom:10px;width:1px;
-  background:linear-gradient(to bottom,var(--text) 0,color-mix(in srgb,var(--text) 22%,transparent) 30%,color-mix(in srgb,var(--text) 22%,transparent) 100%);
-}
-.tl > li{display:grid;grid-template-columns:clamp(110px,14vw,176px) 41px minmax(0,1fr);align-items:start;}
-.tl__when{margin:9px 0 0;text-align:right;font-size:14px;font-weight:500;line-height:1.35;}
-.tl__when span{display:block;font-weight:400;font-size:13px;color:var(--muted);}
-.tl__dot{
-  position:relative;justify-self:center;margin-top:11px;width:11px;height:11px;border-radius:50%;
-  background:var(--bg);box-shadow:0 0 0 1.5px var(--text),0 0 0 6px var(--bg);
-}
-.tl .is-now .tl__dot{background:var(--text);}
-.tl .is-now .tl__dot::after{content:"";position:absolute;inset:0;border-radius:50%;background:var(--text);animation:visitPulse 2.2s var(--ease) infinite;}
-.tl .app__title{margin:0;font-size:clamp(24px,2.4vw,34px);}
-.tl .app__lead{margin-top:8px;font-size:clamp(15px,1.25vw,17.5px);}
-.tl .app__bullets{margin-top:10px;max-width:74ch;}
-.tl .app__bullets li{font-size:14px;line-height:1.5;}
-.tl .project__stack{margin-top:10px;}
+/* Experience: two transit lines and their stations, with the chosen stop written out underneath */
+.mt{display:flex;flex-direction:column;}
+.mt__map{flex:none;display:block;overflow:visible;}
+.mt__line path{fill:none;stroke:var(--track);stroke-width:7;stroke-linecap:round;}
+.mt__line--work{--track:#e4572e;}
+.mt__line--school{--track:#2f76e0;}
+.mt__line .mt__ahead{stroke-dasharray:1 12;opacity:.55;}
+.mt__today{stroke:var(--line);stroke-dasharray:3 4;}
+.mt__map text{font-family:var(--font-body);font-size:13px;font-weight:600;fill:var(--text);}
+.mt__map .mt__small{font-family:var(--mono);font-size:10px;font-weight:400;fill:var(--muted);}
+.mt__map .mt__name{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;fill:var(--track);}
+.mt__stop{cursor:pointer;outline:none;}
+.mt__stop circle{fill:var(--bg);stroke:var(--text);stroke-width:3;transition:fill .2s var(--ease),r .2s var(--ease);}
+.mt__stop:is(:hover,:focus-visible) circle{r:9px;}
+.mt__stop.is-on circle{fill:var(--text);}
+.mt__stops{flex:1;min-height:0;margin-top:clamp(8px,1vw,14px);padding-top:clamp(14px,1.6vw,22px);border-top:1px solid var(--line);}
+.mt__stops article{display:none;max-width:780px;animation:rise .4s var(--ease);}
+.mt__stops article.is-on{display:block;}
+.mt .app__title{margin-top:8px;font-size:clamp(26px,2.8vw,40px);}
+.mt .app__lead{margin-top:10px;font-size:clamp(15px,1.25vw,17.5px);}
+.mt .app__bullets{margin-top:12px;max-width:74ch;}
+.mt .app__bullets li{font-size:14px;line-height:1.5;}
+.mt .project__stack{margin-top:12px;}
 
 /* Résumé: the page as a picture, as wide as the column allows, scrolling with the window */
 .rs{display:flex;flex-direction:column;align-items:center;}
@@ -1989,12 +2178,8 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
   .stage__side{padding-bottom:16px;}
   .stage__main{margin-top:16px;margin-bottom:16px;}
 }
-/* mid widths: the three project columns become two rows */
+/* mid widths */
 @media (max-width:1080px){
-  .pj{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);}
-  .pj__side{grid-column:1/-1;flex-direction:row;align-items:flex-end;gap:16px;}
-  .stage .pj__list{display:flex;flex-wrap:wrap;gap:0 16px;}
-  .pj__ctl{margin:0;}
   .stage__role{flex-basis:100%;}
   .ab{grid-template-columns:minmax(0,1fr);align-content:center;}
 }
@@ -2072,23 +2257,33 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
   .app{position:fixed;z-index:80;}
   .app__bar{height:52px;}
   .app__body{padding:8px var(--pad) 32px;}
-  .pj{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;height:auto;}
-  .pj__side{grid-column:1;}
-  .pj__shot{aspect-ratio:4/3;}
+  /* Projects on a phone: the grid is two across and scrolls, the reel is sized by its width, and the opened
+     project stacks the picture over the write-up */
+  .pj{height:auto;}
+  .stage .pj--grid{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:auto;gap:18px 12px;}
+  .pj__thumb{aspect-ratio:16/10;}
+  .pj--grid button{grid-template-columns:minmax(0,1fr);}
+  .pj--reel{overflow:visible;margin:0 calc(-1 * var(--pad));}
+  .pj--reel .pj__bar{padding:0 var(--pad);}
+  .pj__row{flex:none;overflow:hidden;}
+  .pj__row button{width:76%;height:auto;}
+  .pj__row .pj__peek{width:50%;height:auto;}
+  .pj__cap{padding:0 var(--pad);}
+  .pj--detail{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;row-gap:16px;}
+  .pj--detail .pj__shot{max-height:none;}
   .pj__notes{overflow:visible;}
-  .tl::before{left:5px;}
-  .tl > li{grid-template-columns:11px minmax(0,1fr);column-gap:18px;}
-  .tl__when{grid-column:2;margin:0 0 6px;text-align:left;}
-  .tl__when span{display:inline;margin-left:8px;}
-  .tl__dot{grid-column:1;grid-row:1;margin-top:5px;}
-  .tl > li > article{grid-column:2;}
+  /* Experience on a phone: no map, just the stops, each marked with its line's colour */
+  .mt__map{display:none;}
+  .mt__stops{margin:0;padding:0;border:none;display:grid;gap:26px;}
+  .mt__stops article{display:block;padding-left:14px;border-left:4px solid #e4572e;animation:none;}
+  .mt__stops article[data-track="school"]{border-left-color:#2f76e0;}
   .ct__links li{grid-template-columns:minmax(0,1fr);gap:2px;}
   .stage__base{order:3;flex-direction:row;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:10px 18px;padding:18px var(--pad) 26px;}
   .stage__archive{display:inline;font-family:var(--font-body);font-size:14px;font-weight:500;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px;}
   .stage__foot{flex-basis:100%;margin:0;}
 }
 @media (prefers-reduced-motion:reduce){
-  .desk__lights i,.app,.pj__shot img,.pj__notes,.stage .dock__tab,.ipod__eq i,.ipw,.stk,.al{animation:none !important;}
+  .desk__lights i,.app,.pj__shot img,.pj__notes,.pj__focus,.pj__cap,.pj--detail .pj__shot,.mt__stops article,.stage .dock__tab,.ipod__eq i,.ipw,.stk,.al{animation:none !important;}
   .pj__shot img,.stage__nav nav :is(button,a),.dk__dock :is(button,a){transition:none !important;}
   .pj__shot img{translate:0 0 !important;}
 }
