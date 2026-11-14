@@ -34,10 +34,16 @@ const bandLevel = (bins, from, to) => {
   return sum / ((to - from) * 255);
 };
 
-// slot: an element to render the player panel into instead of the dropdown (the Showcase site opens it as an app).
-// onOpen: replaces the dropdown toggle when the record is pressed.
-function SoundDock({ slot = null, onOpen = null }) {
+const clock = (sec) => {
+  const s = Math.max(0, Math.floor(sec || 0));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+};
+
+// slot: an element to render the player into instead of the dropdown.
+// ipod: draw it as an iPod (screen and click wheel) in the slot; the record then plays and pauses.
+function SoundDock({ slot = null, ipod = false }) {
   const [open, setOpen] = useState(false);
+  const [menu, setMenu] = useState(false);
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -52,6 +58,7 @@ function SoundDock({ slot = null, onOpen = null }) {
     }
   });
   const lastVolumeRef = useRef(volume || 70);
+  const wheelTurned = useRef(false);
   const audioRef = useRef(null);
   const tabRef = useRef(null);
   const panelRef = useRef(null);
@@ -174,6 +181,185 @@ function SoundDock({ slot = null, onOpen = null }) {
   };
 
   const portal = (node) => (slot ? createPortal(node, slot) : node);
+  const audio = (
+    <audio
+      ref={audioRef}
+      preload="none"
+      onPlay={() => setPlaying(true)}
+      onPause={() => setPlaying(false)}
+      onEnded={() => play((index + 1) % TRACKS.length)}
+      onTimeUpdate={(e) => {
+        const a = e.currentTarget;
+        if (a.duration) setProgress(a.currentTime / a.duration);
+      }}
+      onError={() => {
+        setPlaying(false);
+        setFailed(true);
+      }}
+    />
+  );
+  // tracks.js carries each track's length, so the times show before anything has loaded.
+  const duration = track.duration;
+
+  // The speaker picture shared by both players: crossed out when muted, one wave when quiet, two when loud.
+  const speaker = (
+    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" />
+      {volume === 0 ? (
+        <path d="m16 9.5 5 5m0-5-5 5" />
+      ) : (
+        <>
+          <path d="M15.5 9.2a4 4 0 0 1 0 5.6" />
+          {volume > 50 && <path d="M18.3 6.5a8 8 0 0 1 0 11" />}
+        </>
+      )}
+    </svg>
+  );
+  const nudgeVolume = (by) => setVolume((v) => Math.min(100, Math.max(0, v + by)));
+
+  // Turning the iPod's click wheel changes the volume, as it does on a real one: press anywhere on the ring and
+  // drag around it, one full turn for the whole range. A press that turned the wheel doesn't also count as a
+  // click on the button under it.
+  const turnWheel = (e) => {
+    if (e.button !== 0 || e.target.closest(".ipod__center")) return;
+    const box = e.currentTarget.getBoundingClientRect();
+    const angleOf = (ev) => Math.atan2(ev.clientY - (box.top + box.height / 2), ev.clientX - (box.left + box.width / 2));
+    let last = angleOf(e);
+    let turned = 0;
+    let owed = 0;
+    const move = (ev) => {
+      const now = angleOf(ev);
+      let step = now - last;
+      if (step > Math.PI) step -= Math.PI * 2;
+      if (step < -Math.PI) step += Math.PI * 2;
+      last = now;
+      turned += step;
+      // A few degrees of wobble while pressing a button isn't a turn.
+      if (!wheelTurned.current && Math.abs(turned) < 0.14) return;
+      wheelTurned.current = true;
+      owed += (step / (Math.PI * 2)) * 100;
+      const whole = Math.trunc(owed);
+      if (!whole) return;
+      owed -= whole;
+      nudgeVolume(whole);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      // Cleared after the click that follows this release has been swallowed.
+      setTimeout(() => {
+        wheelTurned.current = false;
+      }, 0);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  };
+  const volumeRow = (
+    <div className="ipod__vol">
+      <button type="button" onClick={toggleMute} aria-label={volume > 0 ? "Mute" : "Unmute"}>
+        {speaker}
+      </button>
+      <input type="range" min="0" max="100" value={volume} onChange={(e) => setVolume(Number(e.target.value))} aria-label="Volume" style={{ "--p": `${volume}%` }} />
+    </div>
+  );
+
+  // The iPod: a screen showing what's playing (or, after MENU, the track list) above a click wheel.
+  const ipodNode = (
+    <div className="ipod" role="region" aria-label="Music player" onWheel={(e) => !e.target.closest(".ipod__list") && e.deltaY && nudgeVolume(e.deltaY < 0 ? 4 : -4)}>
+      <div className="ipod__screen">
+        <p className="ipod__head">
+          <span>{menu ? "Music" : "Now Playing"}</span>
+          <span className={`ipod__eq${playing ? " is-playing" : ""}`} aria-hidden="true">
+            <i /><i /><i />
+          </span>
+        </p>
+        {menu ? (
+          <ol className="ipod__list" aria-label="Tracks">
+            {TRACKS.map((t, i) => (
+              <li key={t.src}>
+                <button
+                  type="button"
+                  aria-current={i === index ? "true" : undefined}
+                  onClick={() => {
+                    play(i);
+                    setMenu(false);
+                  }}
+                >
+                  {t.title}
+                </button>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <>
+            <div className="ipod__now">
+              <img src={track.art} alt="" width="40" height="40" />
+              <div>
+                <a className="ipod__title" href={track.soundcloud} target="_blank" rel="noreferrer">
+                  {track.title}
+                </a>
+                <a className="ipod__artist" href={SC_PROFILE} target="_blank" rel="noreferrer">
+                  Later
+                </a>
+              </div>
+            </div>
+            {failed ? (
+              <p className="ipod__status" role="status">
+                Didn't load. <a href={track.soundcloud} target="_blank" rel="noreferrer">SoundCloud</a>
+              </p>
+            ) : (
+              <div className="ipod__time">
+                <span className="ipod__bar" style={{ "--p": `${progress * 100}%` }} />
+                <span>{clock(progress * duration)}</span>
+                <span>-{clock(duration - progress * duration)}</span>
+              </div>
+            )}
+            {volumeRow}
+          </>
+        )}
+      </div>
+      <div
+        className="ipod__wheel"
+        title="Turn the wheel to change the volume"
+        onPointerDown={turnWheel}
+        onClickCapture={(e) => {
+          if (!wheelTurned.current) return;
+          e.stopPropagation();
+          e.preventDefault();
+        }}
+      >
+        <button type="button" className="ipod__menu" onClick={() => setMenu((m) => !m)} aria-pressed={menu}>
+          Menu
+        </button>
+        <button type="button" className="ipod__prev" onClick={() => skip(-1)} aria-label="Previous track">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 5h2.5v14H5zM12 12l7-7v14zM6 12l7-7v14z" /></svg>
+        </button>
+        <button type="button" className="ipod__next" onClick={() => skip(1)} aria-label="Next track">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.5 5H19v14h-2.5zM12 12 5 5v14zM18 12l-7-7v14z" /></svg>
+        </button>
+        <button type="button" className="ipod__pp" onClick={toggle} aria-label={playing ? "Pause" : "Play"}>
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5l8 7-8 7zM13 5h3v14h-3zM18 5h3v14h-3z" /></svg>
+        </button>
+        <button type="button" className="ipod__center" onClick={toggle} aria-label={playing ? "Pause" : "Play"} />
+      </div>
+    </div>
+  );
+
+  if (ipod)
+    return (
+      <div className="dock">
+        {slot && createPortal(ipodNode, slot)}
+        <button type="button" className="dock__tab" aria-label={playing ? `Pause ${track.title}` : "Play my music"} title={playing ? track.title : "My music"} onClick={toggle}>
+          <span ref={eqRef} className={`dock__eq${playing ? " is-playing" : ""}${live ? " is-live" : ""}`} aria-hidden="true">
+            <i /><i /><i />
+          </span>
+          <span className="dock__tab-label">{playing ? track.title : "My music"}</span>
+        </button>
+        {audio}
+      </div>
+    );
 
   return (
     <div className={`dock ${open ? "is-open" : ""}`}>
@@ -226,17 +412,7 @@ function SoundDock({ slot = null, onOpen = null }) {
 
         <div className="dock__volume">
           <button type="button" onClick={toggleMute} aria-label={volume > 0 ? "Mute" : "Unmute"}>
-            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" />
-              {volume === 0 ? (
-                <path d="m16 9.5 5 5m0-5-5 5" />
-              ) : (
-                <>
-                  <path d="M15.5 9.2a4 4 0 0 1 0 5.6" />
-                  {volume > 50 && <path d="M18.3 6.5a8 8 0 0 1 0 11" />}
-                </>
-              )}
-            </svg>
+            {speaker}
           </button>
           <input
             className="dock__range"
@@ -277,7 +453,7 @@ function SoundDock({ slot = null, onOpen = null }) {
         className="dock__tab"
         aria-expanded={open}
         aria-controls="dock-panel"
-        onClick={() => (onOpen ? onOpen() : setOpen((o) => !o))}
+        onClick={() => setOpen((o) => !o)}
       >
         <span ref={eqRef} className={`dock__eq${playing ? " is-playing" : ""}${live ? " is-live" : ""}`} aria-hidden="true">
           <i /><i /><i />
@@ -285,21 +461,7 @@ function SoundDock({ slot = null, onOpen = null }) {
         <span className="dock__tab-label">{playing ? track.title : "My music"}</span>
       </button>
 
-      <audio
-        ref={audioRef}
-        preload="none"
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onEnded={() => play((index + 1) % TRACKS.length)}
-        onTimeUpdate={(e) => {
-          const a = e.currentTarget;
-          if (a.duration) setProgress(a.currentTime / a.duration);
-        }}
-        onError={() => {
-          setPlaying(false);
-          setFailed(true);
-        }}
-      />
+      {audio}
     </div>
   );
 }
