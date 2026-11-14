@@ -45,8 +45,6 @@ const APPS = [
   { id: "contact", name: "Contact" },
   { id: "resume", name: "Résumé" },
 ];
-// The nav lists the sections; Résumé is reached from the dock and the résumé link. (The nav is hidden for now.)
-const NAV = APPS.slice(0, 4);
 // The live projects, each opening in a new tab, and GitHub. They live in the dock's Apps folder.
 const liveOf = (name) => PROJECTS.find((p) => p.name === name).live;
 const LINKS = [
@@ -398,9 +396,6 @@ function ExperienceApp() {
   );
 }
 
-const monthOf = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" });
-const TOKENS_BURNT = `${new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 }).format(AI_USAGE.tokens.total)} Claude Code tokens, ${monthOf(AI_USAGE.since)} to ${monthOf(AI_USAGE.asOf)}`;
-
 const ABOUT_FACTS = [
   ["Based in", "San Diego, California"],
   ["University", "B.S. Computer Science, San Diego State University, expected June 2027"],
@@ -428,17 +423,23 @@ function AboutApp() {
   );
 }
 
+/* ---- Contact: a business card, in a small window of its own like "About This Mac". The boat in the corner,
+   the name and what I do, and the four ways to reach me along the bottom. ---- */
 function ContactApp() {
   return (
-    <div className="ct">
-      <h2 className="app__title app__title--xl">Love to talk about anything.</h2>
-      <ul className="ct__links">
+    <div className="bc">
+      <svg className="bc__boat" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M11.500 3v12.500H4.500zM13 6.500v9h5.500zM2.500 17.500h19l-2.800 3.500H5.300z" />
+      </svg>
+      <div>
+        <h2 className="bc__name">Perfect Phanitchaleun</h2>
+        <p className="bc__role">Software Engineer</p>
+      </div>
+      <ul className="bc__lines">
         {CONTACTS.map((c) => (
           <li key={c.name}>
-            <span className="app__label">{c.name}</span>
-            <a href={c.href} target={c.href.startsWith("mailto:") ? undefined : "_blank"} rel="noreferrer" data-umami-event={c.event}>
+            <a href={c.href} target={c.href.startsWith("mailto:") ? undefined : "_blank"} rel="noreferrer" aria-label={`${c.name}: ${c.text}`} data-umami-event={c.event}>
               {c.text}
-              <ArrowIcon />
             </a>
           </li>
         ))}
@@ -518,7 +519,7 @@ function MenuClock() {
   }, []);
   return (
     <time className="mb__time" title="The time in San Diego">
-      {SD_MENU.format(now).replace(/,/g, "")}
+      {SD_MENU.format(now).replace(/,| at/g, "")}
     </time>
   );
 }
@@ -573,6 +574,34 @@ function CalendarWidget() {
           </li>
         ))}
       </ol>
+    </div>
+  );
+}
+
+/* ---- Tokens widget: how much Claude Code has been burnt building all this, as dots you could count: one for
+   every hundred million tokens, the last one faded by however much of it is used. The numbers come from
+   src/ai-usage.json, which "npm run usage" refreshes. ---- */
+const compact = (n) => new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 }).format(n);
+const inWords = (n) => new Intl.NumberFormat("en-US", { notation: "compact", compactDisplay: "long" }).format(n);
+const monthOf = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString("en-US", { month: "short", year: "numeric" });
+// What one dot stands for. It steps up once there would be more than seven rows of ten, so the dots always fit.
+const DOT_SIZES = [1e8, 2e8, 5e8, 1e9, 2e9, 5e9, 1e10];
+
+function TokensWidget() {
+  const total = AI_USAGE.tokens.total;
+  const each = DOT_SIZES.find((size) => total / size <= 70) ?? DOT_SIZES[DOT_SIZES.length - 1];
+  const dots = total / each;
+  return (
+    <div className="wg wg--tokens" role="img" aria-label={`${compact(total)} Claude Code tokens burnt since ${monthOf(AI_USAGE.since)}, over ${compact(AI_USAGE.replies)} replies`}>
+      <div className="wg__dots">
+        {Array.from({ length: Math.ceil(dots) }, (_, i) => (
+          <i key={i} style={i + 1 > dots ? { opacity: dots - i } : undefined} />
+        ))}
+      </div>
+      <p>
+        <b>{compact(total)}</b> tokens burnt
+      </p>
+      <span>each dot is {inWords(each)}</span>
     </div>
   );
 }
@@ -639,22 +668,70 @@ function SailorText() {
   );
 }
 
-/* ---- Résumé: the pages on the laptop screen, with the download beside it. They're pictures made from the PDF
-   (npm run resume) because the live server won't let the PDF itself be shown in a frame. ---- */
+/* ---- Résumé: the pages at a readable width, scrolling, with a small copy of the whole thing beside them. A
+   frame on the small copy shows which part is on screen; click or drag on it to move there. The pages are
+   pictures made from the PDF (npm run resume) because the live server won't let the PDF itself be shown in a
+   frame. Clicking a page opens the real PDF. ---- */
 const RESUME_PAGES = 1;
+const RESUME_SHOTS = Array.from({ length: RESUME_PAGES }, (_, i) => `/resume-${i + 1}.png`);
 
 function ResumeApp() {
+  const box = useRef(null);
+  // Which part of the pages is on screen, as fractions of their whole height.
+  const [view, setView] = useState({ top: 0, size: 1 });
+  const track = () => {
+    const el = box.current;
+    if (el) setView({ top: el.scrollTop / el.scrollHeight, size: Math.min(1, el.clientHeight / el.scrollHeight) });
+  };
+  // Measured again whenever the window changes size or a page's picture arrives.
+  useEffect(() => {
+    const el = box.current;
+    const watch = new ResizeObserver(track);
+    watch.observe(el);
+    watch.observe(el.firstElementChild);
+    return () => watch.disconnect();
+  }, []);
+  // Pressing on the small copy brings that part of the page to the middle of the window; dragging keeps going.
+  const jump = (e) => {
+    const map = e.currentTarget;
+    const go = (ev, smooth) => {
+      const r = map.getBoundingClientRect();
+      const el = box.current;
+      el.scrollTo({ top: ((ev.clientY - r.top) / r.height) * el.scrollHeight - el.clientHeight / 2, behavior: smooth ? "smooth" : "auto" });
+    };
+    const move = (ev) => go(ev, false);
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+    };
+    e.preventDefault();
+    go(e, true);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  };
   return (
     <div className="rs">
-      <a className="rs__pages" href={RESUME.href} target="_blank" rel="noreferrer" aria-label="Résumé of Perfect Phanitchaleun, opens the PDF">
-        {Array.from({ length: RESUME_PAGES }, (_, i) => (
-          <img key={i} src={`/resume-${i + 1}.png`} alt="" width="1836" height="2376" />
-        ))}
-      </a>
-      <a className="rs__get" {...RESUME} data-umami-event-location="resume-app">
-        Download
-        <DownloadIcon />
-      </a>
+      <div className="rs__scroll" ref={box} onScroll={track}>
+        <a className="rs__pages" href={RESUME.href} target="_blank" rel="noreferrer" aria-label="Résumé of Perfect Phanitchaleun, opens the PDF">
+          {RESUME_SHOTS.map((src) => (
+            <img key={src} src={src} alt="" width="1836" height="2376" />
+          ))}
+        </a>
+      </div>
+      <aside className="rs__side">
+        <button type="button" className="rs__map" onPointerDown={jump} aria-label="Jump to a part of the page">
+          {RESUME_SHOTS.map((src) => (
+            <img key={src} src={src} alt="" width="1836" height="2376" />
+          ))}
+          <i style={{ top: `${view.top * 100}%`, height: `${view.size * 100}%` }} />
+        </button>
+        <a className="rs__get" {...RESUME} data-umami-event-location="resume-app">
+          PDF
+          <DownloadIcon />
+        </a>
+      </aside>
     </div>
   );
 }
@@ -857,7 +934,6 @@ export default function Stage() {
   const [nudge, setNudge] = useState(() => stored("stage-nudge") !== "1" && readRoute().view === "home");
   const [musicSlot, setMusicSlot] = useState(null);
   const openCount = useRef(null);
-  const [hint, setHint] = useState(null);
   const lastView = useRef(null);
   const stageRef = useRef(null);
   const screenRef = useRef(null);
@@ -1206,7 +1282,6 @@ export default function Stage() {
     },
   ];
   const openStack = STACKS.find((s) => s.id === stack);
-  const hinting ={ onPointerLeave: () => setHint(null), onBlur: () => setHint(null) };
 
   return (
     <div className="site stage" ref={stageRef} data-open={wins.length ? "" : undefined}>
@@ -1228,19 +1303,9 @@ export default function Stage() {
 
       </div>
 
-      {/* the left column: the nav and tools, then the résumé and footer under them */}
+      {/* the left column: the tools, then the résumé and footer under them */}
       <aside className="stage__side">
         <div className="stage__nav">
-          <nav aria-label="Primary" className={hint ? "has-hint" : undefined}>
-            {NAV.map((a) => (
-              <button key={a.id} type="button" className={hint === a.id ? "is-hint" : undefined} aria-current={a.id === viewId ? "page" : undefined} onClick={() => openWin(a.id)} data-umami-event={`view-${a.id}`}>
-                {a.name.toLowerCase()}
-              </button>
-            ))}
-            <a href="/archive/index.html" data-umami-event="view-archive">
-              archive
-            </a>
-          </nav>
           <div className="stage__tools">
             <div className="stage__themes" role="group" aria-label="Color theme">
               {THEMES.map((t) => (
@@ -1284,10 +1349,11 @@ export default function Stage() {
                   <i />
                   <i />
                 </div>
-                {/* widgets in the top left corner: the clock and the calendar */}
+                {/* widgets in the top left corner: the clock, the calendar and the tokens burnt */}
                 <div className="desk__widgets">
                   <ClockWidget />
                   <CalendarWidget />
+                  <TokensWidget />
                 </div>
                 <ul className="desk__files" aria-label="On the desktop">
                   {FILES.map((f) => (
@@ -1303,7 +1369,7 @@ export default function Stage() {
                 <ul className="desk__apps" aria-label="Sections">
                   {APPS.map((a) => (
                     <li key={a.id} data-app={a.id}>
-                      <button type="button" onClick={() => openWin(a.id)} onPointerEnter={() => setHint(a.id)} onFocus={() => setHint(a.id)} {...hinting} data-umami-event={`home-${a.id}`}>
+                      <button type="button" onClick={() => openWin(a.id)} data-umami-event={`home-${a.id}`}>
                         <span className="da__tile">
                           <AppIcon id={a.id} />
                         </span>
@@ -1549,24 +1615,8 @@ const STAGE_CSS = `
 .stage__mark button:focus-visible{outline:2px solid var(--text);outline-offset:6px;}
 .stage__role{margin:0;font-family:var(--font-body);font-size:max(12.5px,calc((var(--side) - var(--pad) - 12px) / 20.5));line-height:1.4;color:var(--muted);}
 .stage__role span{display:block;}
-/* ---- the nav and tools: in the left column, above the résumé ---- */
+/* ---- the tools (colour themes and the record): in the left column, above the résumé ---- */
 .stage__nav{display:flex;flex-direction:column;align-items:flex-start;gap:16px;}
-.stage__nav nav{display:none;flex-direction:column;align-items:flex-start;} /* hidden for now: display:flex brings it back */
-.stage__nav nav :is(button,a){
-  position:relative;padding:0;border:none;background:none;cursor:pointer;white-space:nowrap;
-  font-size:17px;line-height:1.35;font-weight:400;letter-spacing:-.005em;color:var(--muted);text-decoration:none;
-  transition:color .25s var(--ease),opacity .25s var(--ease),translate .3s var(--ease);
-}
-.stage__nav nav :is(button,a):hover{color:var(--text);}
-.stage__nav nav [aria-current]{color:var(--text);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px;}
-/* pointing at a dock icon: its name in the nav steps forward behind a dot, and the other names fall back */
-.stage__nav nav.has-hint > :not(.is-hint){opacity:.28;}
-.stage__nav nav .is-hint{color:var(--text);translate:14px 0;}
-.stage__nav nav button::after{
-  content:"";position:absolute;right:calc(100% + 8px);top:50%;width:6px;height:6px;margin-top:-3px;border-radius:50%;
-  background:var(--text);scale:0;transition:scale .3s var(--ease);
-}
-.stage__nav nav .is-hint::after{scale:1;}
 .stage__tools{display:flex;align-items:center;gap:14px;}
 .stage__themes{display:grid;grid-template-columns:repeat(2,18px);gap:6px;}
 .stage__themes button{
@@ -1679,7 +1729,7 @@ const STAGE_CSS = `
 .desk__apps button:is(:hover,:focus-visible) .da__tile{scale:1.06;}
 .desk__apps button:active .da__tile{scale:.94;}
 
-/* widgets in the top left corner: the clock and the calendar, sized together from --wg */
+/* widgets in the top left corner: the clock, the calendar and the tokens burnt, sized together from --wg */
 .desk__widgets{--wg:clamp(100px,10vw,150px);position:relative;z-index:1;align-self:flex-start;display:flex;align-items:flex-start;gap:calc(var(--wg) * .12);}
 .wg{flex:none;width:var(--wg);height:var(--wg);min-height:0;overflow:hidden;}
 .wg--clock{
@@ -1713,6 +1763,19 @@ const STAGE_CSS = `
 .wg--cal li{display:grid;place-items:center;width:1.55em;height:1.55em;border-radius:50%;}
 .wg__dow{font-size:.86em;font-weight:600;color:var(--muted);}
 .wg--cal .is-today{background:#ff3b30;color:#fff;font-weight:700;}
+/* the tokens burnt: the same card as the calendar, filled with dots, the total in words underneath */
+.wg--tokens{
+  display:flex;flex-direction:column;padding:calc(var(--wg) * .095) calc(var(--wg) * .1) calc(var(--wg) * .085);border-radius:23%;
+  font-size:calc(var(--wg) * .068);line-height:1.3;
+  background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(14px) saturate(170%);-webkit-backdrop-filter:blur(14px) saturate(170%);
+  box-shadow:inset 0 1px 0 var(--rim-soft),0 0 0 .5px var(--glass-edge),0 18px 36px -22px color-mix(in srgb,var(--shadow) 55%,transparent);
+}
+.wg__dots{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:calc(var(--wg) * .023);}
+.wg__dots i{aspect-ratio:1;border-radius:50%;background:#d97757;}
+.wg--tokens p{margin:auto 0 0;font-size:1.02em;font-weight:500;white-space:nowrap;}
+/* the total is set in the same type as the clock's numerals and the calendar, only heavier */
+.wg--tokens b{font-size:1.6em;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;}
+.wg--tokens span{font-size:.84em;color:var(--muted);white-space:nowrap;}
 
 /* the iPod: white body, a small screen, a click wheel. It keeps its own colours in every theme, like a real one.
    It pops up in the middle of the screen from the dock's Music app, floats over everything, and drags anywhere. */
@@ -1923,7 +1986,7 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
   inset:var(--win-t) var(--win-l) calc(var(--desk-pad) + var(--ic) * 1.34 + 18px);
 }
 /* green: the window takes the whole screen between the menu bar and the dock */
-.stage .app[data-max]{--win-t:var(--mb);--win-l:0px;--win-r:0px;inset:var(--mb) 0 calc(var(--desk-pad) + var(--ic) * 1.34 + 10px);}
+.stage .app[data-max]{--win-t:var(--mb);--win-l:0px;--win-r:0px;inset:var(--mb) 0 calc(var(--desk-pad) + var(--ic) * 1.34 + 10px);width:auto;height:auto;}
 .app[data-phase="out"]{animation:appOut .3s cubic-bezier(.55,0,.85,.35) both;}
 @keyframes appIn{from{opacity:0;transform:scale(.06);border-radius:26%;}40%{opacity:1;}to{opacity:1;transform:none;border-radius:var(--win-r,0);}}
 @keyframes appOut{from{opacity:1;transform:none;border-radius:var(--win-r,0);}to{opacity:0;transform:scale(.06);border-radius:26%;}}
@@ -2129,14 +2192,21 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
 .mt .app__bullets li{font-size:14px;line-height:1.5;}
 .mt .project__stack{margin-top:12px;}
 
-/* Résumé: the page as a picture, as wide as the column allows, scrolling with the window */
-.rs{display:flex;flex-direction:column;align-items:center;}
-.rs__pages{display:flex;flex-direction:column;gap:16px;width:min(100%,860px);cursor:zoom-in;}
-.rs__pages img{display:block;width:100%;height:auto;border-radius:6px;background:#fff;box-shadow:0 0 0 1px var(--line),0 18px 40px -26px color-mix(in srgb,var(--shadow) 60%,transparent);}
-/* the download stays in the bottom right corner while the page scrolls under it */
+/* Résumé: the pages scroll on a grey desk, with a small copy of them and the download down the right side */
+.app[data-id="resume"] .app__body{padding:0;overflow:hidden;}
+.rs{display:grid;grid-template-columns:minmax(0,1fr) auto;height:100%;min-height:0;background:var(--surface);}
+.rs__scroll{min-height:0;overflow-y:auto;scrollbar-width:none;padding:clamp(14px,1.8vw,24px) clamp(14px,2vw,28px);display:grid;justify-items:center;align-content:start;}
+.rs__scroll::-webkit-scrollbar{display:none;}
+.rs__pages{display:flex;flex-direction:column;gap:16px;width:min(100%,780px);cursor:zoom-in;}
+.rs__pages img{display:block;width:100%;height:auto;border-radius:4px;background:#fff;box-shadow:0 0 0 1px var(--line),0 18px 40px -26px color-mix(in srgb,var(--shadow) 60%,transparent);}
+.rs__side{display:flex;flex-direction:column;align-items:center;gap:14px;padding:clamp(14px,1.8vw,24px) clamp(14px,1.8vw,24px) clamp(14px,1.8vw,24px) 0;}
+/* the small copy: the frame on it is the part of the page that's on screen */
+.rs__map{position:relative;display:flex;flex-direction:column;gap:2px;width:clamp(64px,6.4vw,92px);padding:0;border:none;background:none;cursor:pointer;touch-action:none;}
+.rs__map img{display:block;width:100%;height:auto;background:#fff;box-shadow:0 0 0 1px var(--line);pointer-events:none;}
+.rs__map i{position:absolute;left:-4px;right:-4px;min-height:8px;border:2px solid #1f86ea;border-radius:4px;background:rgba(31,134,234,.12);pointer-events:none;}
 .rs__get{
-  position:sticky;bottom:0;align-self:flex-end;margin-top:-30px;display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;
-  background:var(--text);color:var(--bg) !important;font-size:14px;font-weight:500;box-shadow:0 12px 24px -14px color-mix(in srgb,var(--shadow) 80%,transparent);
+  display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:999px;
+  background:var(--text);color:var(--bg) !important;font-size:13px;font-weight:500;box-shadow:0 12px 24px -14px color-mix(in srgb,var(--shadow) 80%,transparent);
 }
 
 /* About */
@@ -2144,12 +2214,20 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
 .ab__facts{margin:0;display:flex;flex-direction:column;gap:clamp(12px,1.5vw,20px);}
 .ab__facts dd{margin:5px 0 0;font-size:clamp(15.5px,1.3vw,18px);line-height:1.35;}
 
-/* Contact */
-.ct{display:flex;flex-direction:column;justify-content:center;}
-.stage .ct__links{list-style:none;margin:clamp(30px,4.4vw,60px) 0 0;padding:0;display:flex;flex-direction:column;gap:clamp(8px,1vw,12px);}
-.ct__links li{display:grid;grid-template-columns:minmax(80px,120px) minmax(0,1fr);align-items:baseline;gap:12px;}
-.ct__links a{display:inline-flex;align-items:center;gap:7px;justify-self:start;max-width:100%;overflow-wrap:anywhere;font-size:clamp(16px,1.4vw,20px);}
-.ct__links a:hover{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px;}
+/* Contact: a business card. Its window is small and sits in the middle of the screen, sized like a card. */
+.app[data-id="contact"]{
+  --win-l:max(16px,calc((var(--sw) - 22px - 460px) / 2));
+  --win-t:max(calc(var(--mb) + 10px),calc((var(--sw) / 1.56 - 22px - 300px) / 2 - var(--ic) * .5));
+  inset:var(--win-t) auto auto var(--win-l);width:min(460px,calc(100% - 32px));height:300px;
+}
+.app[data-id="contact"] .app__body{padding:0;overflow:hidden;}
+.bc{position:relative;display:flex;flex-direction:column;justify-content:space-between;height:100%;padding:28px 30px 26px;}
+.bc__boat{position:absolute;top:26px;right:28px;width:30px;height:30px;fill:currentColor;}
+.bc__name{margin:0;font-family:var(--font-display);font-weight:400;font-size:30px;letter-spacing:-.015em;line-height:1;}
+.bc__role{margin:8px 0 0;font-size:14px;line-height:1.3;color:var(--muted);}
+.stage .bc__lines{list-style:none;margin:0;padding:0;display:grid;gap:4px;font-size:12.5px;line-height:1.35;}
+.bc__lines a{overflow-wrap:anywhere;}
+.bc__lines a:hover{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px;}
 
 /* ---- first-visit intro: the laptop opens in the middle of the page, then settles into its place ---- */
 .stage[data-intro-wait] :is(.stage__nav,.stage__side,.stage__role,.stage__mac){opacity:0;}
@@ -2174,7 +2252,6 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
 /* short windows: tighten the header so the laptop keeps its height */
 @media (max-height:760px){
   .stage__top{padding-top:16px;}
-  .stage__nav nav :is(button,a){font-size:15px;line-height:1.25;}
   .stage__side{padding-bottom:16px;}
   .stage__main{margin-top:16px;margin-bottom:16px;}
 }
@@ -2196,7 +2273,6 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
   .stage__nav{position:absolute;z-index:2;top:20px;right:var(--pad);}
   /* an open app takes the whole phone screen, so the page's own header and footer step aside */
   .stage[data-open] :is(.stage__top,.stage__nav,.stage__base){visibility:hidden;}
-  .stage__nav nav{display:none;}
   .stage__tools{gap:12px;}
   .stage__themes{grid-template-columns:repeat(4,18px);}
   .stage .dock__tab{width:36px;height:36px;}
@@ -2248,12 +2324,18 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
   .stage__mac{--mb:0px;}
   .mb,.app__min,.app__max{display:none;}
   .wins{z-index:80;}
-  .stage .app,.stage .app[data-max]{inset:0;--win-t:0px;--win-l:0px;--win-r:0;box-shadow:none;translate:none;transform-origin:var(--ox,50%) var(--oy,100%);}
+  .stage .app,.stage .app[data-max]{inset:0;width:auto;height:auto;--win-t:0px;--win-l:0px;--win-r:0;box-shadow:none;translate:none;transform-origin:var(--ox,50%) var(--oy,100%);}
   .app__bar{touch-action:auto;}
   .al{position:fixed;z-index:95;inset:0;}
   .dk__nudge{grid-column:1/-1;order:2;margin:0;}
   /* a phone's home screen: the two widgets side by side on top, then the sections, then the project apps */
-  .stage .desk__widgets{display:flex;--wg:min(40vw,170px);margin-bottom:4px;}
+  .stage .desk__widgets{display:flex;flex-wrap:wrap;--wg:min(40vw,170px);margin-bottom:4px;}
+  /* three widgets don't fit across a phone, so the tokens card lies down under the other two */
+  .wg--tokens{display:grid;grid-template-columns:44% minmax(0,1fr);column-gap:1.4em;align-content:center;width:calc(var(--wg) * 2.12);height:auto;padding:calc(var(--wg) * .1) calc(var(--wg) * .12);border-radius:calc(var(--wg) * .2);}
+  .wg__dots{grid-row:1 / span 2;}
+  .wg--tokens p{align-self:end;margin:0;font-size:1.15em;}
+  .wg--tokens b{font-size:1.9em;}
+  .wg--tokens span{font-size:1em;}
   .app{position:fixed;z-index:80;}
   .app__bar{height:52px;}
   .app__body{padding:8px var(--pad) 32px;}
@@ -2272,19 +2354,27 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
   .pj--detail{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;row-gap:16px;}
   .pj--detail .pj__shot{max-height:none;}
   .pj__notes{overflow:visible;}
+  /* Résumé on a phone: no small copy, just the pages, with the download floating in the corner */
+  .rs{grid-template-columns:minmax(0,1fr);height:calc(100svh - 52px);}
+  .rs__map{display:none;}
+  .rs__side{position:absolute;right:var(--pad);bottom:20px;padding:0;}
   /* Experience on a phone: no map, just the stops, each marked with its line's colour */
   .mt__map{display:none;}
   .mt__stops{margin:0;padding:0;border:none;display:grid;gap:26px;}
   .mt__stops article{display:block;padding-left:14px;border-left:4px solid #e4572e;animation:none;}
   .mt__stops article[data-track="school"]{border-left-color:#2f76e0;}
-  .ct__links li{grid-template-columns:minmax(0,1fr);gap:2px;}
+  /* the business card on a phone: the same card, with room to breathe and bigger type to tap */
+  .bc{justify-content:flex-start;gap:56px;padding:36px var(--pad);}
+  .bc__boat{top:34px;right:var(--pad);}
+  .bc__name{font-size:34px;max-width:7.5em;}
+  .stage .bc__lines{gap:14px;font-size:16px;}
   .stage__base{order:3;flex-direction:row;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:10px 18px;padding:18px var(--pad) 26px;}
   .stage__archive{display:inline;font-family:var(--font-body);font-size:14px;font-weight:500;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px;}
   .stage__foot{flex-basis:100%;margin:0;}
 }
 @media (prefers-reduced-motion:reduce){
   .desk__lights i,.app,.pj__shot img,.pj__notes,.pj__focus,.pj__cap,.pj--detail .pj__shot,.mt__stops article,.stage .dock__tab,.ipod__eq i,.ipw,.stk,.al{animation:none !important;}
-  .pj__shot img,.stage__nav nav :is(button,a),.dk__dock :is(button,a){transition:none !important;}
+  .pj__shot img,.dk__dock :is(button,a){transition:none !important;}
   .pj__shot img{translate:0 0 !important;}
 }
 `;
