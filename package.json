@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "usage": "node scripts/ai-usage.mjs"
+    "usage": "node scripts/ai-usage.mjs",
+    "resume": "swift scripts/resume-image.swift ."
   },
   "dependencies": {
     "react": "^19.2.8",

@@ -1,7 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AI_USAGE, DEVICON, GITHUB, EXPERIENCE, PROJECTS, SKILL_SOURCES, TECH, rich } from "./data";
+import { Suspense, lazy, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { AI_USAGE, GITHUB, EXPERIENCE, PROJECTS, rich } from "./data";
 import { ArrowIcon, DownloadIcon, ProjectNotes, RESUME, VisitorCount, useAnalytics } from "./shared";
 import { DOCK_CSS, SC_PROFILE, SoundDock } from "./sound";
+import { AppIcon, FolderArt, TextArt } from "./art";
+import { makeDrive } from "./drive";
 import SAILOR_TXT from "./sailor.txt?raw";
 
 // Every picture placed in src/assets/boat shows up in the "boat" folder, in file-name order.
@@ -9,9 +11,16 @@ const BOAT_PHOTOS = Object.entries(import.meta.glob("./assets/boat/*.{jpg,jpeg,p
   .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
   .map(([path, src]) => ({ src, name: path.split("/").pop() }));
 
+// The dock's small apps are fetched the first time one is opened, or once the page has gone quiet, whichever
+// comes first, so the first paint doesn't wait on them.
+const loadMini = () => import("./apps");
+const loadObsidian = () => import("./obsidian");
+const MiniApp = lazy(loadMini);
+const Obsidian = lazy(loadObsidian);
+
 /* The Showcase site: one screen, no page scroll, and one laptop that never leaves.
    Its screen is a desktop: drifting lights and a dock of five sections. Choosing one opens it
-   like an app, zooming out of its dock icon to fill the screen; closing it zooms back in. */
+   like an app, zooming out of its icon into a window above the dock; closing it zooms back in. */
 
 const EMAIL = "perfectphanitchaleun@gmail.com";
 
@@ -32,20 +41,55 @@ const CONTACTS = [
 const APPS = [
   { id: "projects", name: "Projects" },
   { id: "experience", name: "Experience" },
-  { id: "stack", name: "Tech stack" },
   { id: "about", name: "About" },
   { id: "contact", name: "Contact" },
-  { id: "music", name: "Music" },
   { id: "resume", name: "Résumé" },
 ];
-// The top-right nav lists the five sections; Music and Résumé are reached from the dock, the record and the résumé link.
-const NAV = APPS.slice(0, 5);
+// The nav lists the sections; Résumé is reached from the dock and the résumé link. (The nav is hidden for now.)
+const NAV = APPS.slice(0, 4);
+// The live projects, each opening in a new tab, and GitHub. They live in the dock's Apps folder.
+const liveOf = (name) => PROJECTS.find((p) => p.name === name).live;
+const LINKS = [
+  { id: "gitube", name: "gitube", href: liveOf("gitube"), icon: "/icons/apps/gitube.svg" },
+  { id: "mordi", name: "Mordi", href: liveOf("Mordi"), icon: "/icons/dock/mordi.png" },
+  { id: "pdfyier", name: "pdfyier", href: liveOf("pdfyier"), icon: "/icons/apps/pdfyier.svg" },
+  { id: "lonelychess", name: "Lonely Chess", href: liveOf("Lonely Chess"), icon: "/icons/apps/lonelychess.svg" },
+  { id: "github", name: "GitHub", href: GITHUB, icon: "/icons/apps/github.svg" },
+];
+// The apps on my own Mac's dock. Each does one small thing: "app" opens a little window of its own, "alert" pops
+// up a note, and "href" leaves for a real site.
+const DOCK_EXTRAS = [
+  { id: "safari", name: "Safari", app: true },
+  { id: "slack", name: "Slack", app: true },
+  { id: "claude", name: "Claude", app: true },
+  { id: "vscodium", name: "VSCodium", app: true },
+  { id: "ghostty", name: "Ghostty", app: true },
+  { id: "obsidian", name: "Obsidian", app: true },
+  { id: "flstudio", name: "FL Studio", alert: "lol" },
+  { id: "mordi", name: "Mordi", href: liveOf("Mordi") },
+  { id: "tailscale", name: "Tailscale", alert: "lol" },
+];
+// The little windows the dock's apps open, Finder's included.
+const MINI = [{ id: "finder", name: "Finder" }, ...DOCK_EXTRAS.filter((x) => x.app)];
+// More favourites for Safari's start page, beside the live projects.
+const SAFARI_MORE = [
+  { name: "LinkedIn", href: "https://www.linkedin.com/in/perfect-phanitchaleun", color: "#0a66c2", event: "social-linkedin" },
+  { name: "SoundCloud", href: SC_PROFILE, color: "#ff5500", event: "social-soundcloud" },
+  { name: "Archive", href: "/archive/index.html", color: "#6b6f76", event: "view-archive" },
+];
+// Folders at the end of the dock. Each opens as a grid above its icon, the way a macOS dock folder does.
+const STACKS = [
+  { id: "apps", name: "Apps", items: LINKS },
+  { id: "workflow", name: "Workflow", items: [] },
+];
 // Things lying on the desktop itself, opened the same way as the dock's apps.
 const FILES = [
   { id: "boat", name: "boat", kind: "folder" },
   { id: "sailor", name: "sailor.txt", kind: "text" },
 ];
-const WINDOWS = [...APPS, ...FILES];
+// The note that greets a first-time visitor. It opens from the boat in the menu bar, too.
+const WELCOME = { id: "welcome", name: "Welcome" };
+const WINDOWS = [...APPS, ...FILES, ...MINI, WELCOME];
 
 // Listed under the jobs on the Experience timeline.
 const EDUCATION = {
@@ -57,18 +101,23 @@ const EDUCATION = {
   stack: [],
 };
 
-const APP_ICONS = {
-  projects: <path d="M4 5.5h6.5V12H4zM13.5 5.5H20V12h-6.5zM4 15h6.5v4.5H4zM13.5 15H20v4.5h-6.5z" />,
-  experience: <path d="M4 8.5h16V19H4zM9 8.5V6h6v2.5M4 13h16" />,
-  stack: <path d="m12 4 8 4-8 4-8-4zM4 12l8 4 8-4M4 16l8 4 8-4" />,
-  about: <path d="M12 12.5A3.75 3.75 0 1 0 12 5a3.75 3.75 0 0 0 0 7.5zM5 20c.6-3.4 3.3-5 7-5s6.4 1.6 7 5" />,
-  contact: <path d="M4 6.5h16v11H4zM4.5 7l7.5 6 7.5-6" />,
-  music: <path d="M9.500 18V6l10-2v12M9.500 18a2.750 2.750 0 1 1-5.500 0 2.750 2.750 0 0 1 5.500 0zM19.500 16a2.750 2.750 0 1 1-5.500 0 2.750 2.750 0 0 1 5.500 0z" />,
-  resume: <path d="M7 3.500h7l4 4V20.500H7zM13.500 3.500V8H18M10 12.500h5M10 16h5" />,
-};
-const AppIcon = ({ id }) => (
-  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    {APP_ICONS[id]}
+// The Music app's icon: a little white iPod.
+const MusicArt = () => (
+  <svg viewBox="0 0 64 64" width="40" height="40" aria-hidden="true">
+    <defs>
+      <linearGradient id="mu-body" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stopColor="#ffffff" />
+        <stop offset="1" stopColor="#dcdcd8" />
+      </linearGradient>
+      <linearGradient id="mu-screen" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stopColor="#7cb6ff" />
+        <stop offset="1" stopColor="#2f76e0" />
+      </linearGradient>
+    </defs>
+    <rect x="17" y="5" width="30" height="54" rx="6" fill="url(#mu-body)" stroke="#bdbdb8" />
+    <rect x="21" y="9" width="22" height="17" rx="1.5" fill="url(#mu-screen)" />
+    <circle cx="32" cy="42" r="10.5" fill="#e6e6e2" stroke="#d0d0cb" />
+    <circle cx="32" cy="42" r="3.8" fill="#fff" stroke="#cfcfca" />
   </svg>
 );
 
@@ -196,72 +245,15 @@ function ExperienceApp() {
   );
 }
 
-function StackApp({ openProject }) {
-  const [skill, setSkill] = useState(null);
-  const sources = skill ? SKILL_SOURCES.filter((s) => s.skills.includes(skill)) : [];
-  return (
-    <div className="sk">
-      <div className="sk__groups">
-        {TECH.map((group) => (
-          <section key={group.label} aria-label={group.label}>
-            <h2 className="sk__group">{group.label}</h2>
-            <ul className="sk__chips">
-              {group.items.map(([name, slug]) => (
-                <li key={name}>
-                  <button type="button" aria-pressed={name === skill} onClick={() => setSkill(name === skill ? null : name)}>
-                    {slug ? <img src={slug.startsWith("/") ? slug : `${DEVICON}/${slug}.svg`} alt="" width="16" height="16" /> : <i aria-hidden="true">{name.charAt(0)}</i>}
-                    {name}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))}
-      </div>
-      <div className="sk__used" aria-live="polite">
-        {!skill && <p className="app__meta">Press a tool to see which projects use it</p>}
-        {skill &&
-          (sources.length ? (
-            <>
-              <p className="app__meta">{skill} was used in</p>
-              <ul>
-                {sources.map((s) => {
-                  const i = PROJECTS.findIndex((p) => p.name === s.name);
-                  return (
-                    <li key={s.name}>
-                      {i === -1 ? (
-                        <a href={s.href} target="_blank" rel="noreferrer">
-                          {s.name}
-                          <ArrowIcon />
-                        </a>
-                      ) : (
-                        <button type="button" onClick={() => openProject(i)}>
-                          {s.name}
-                        </button>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </>
-          ) : (
-            <p className="app__meta">{skill}: learned outside the projects shown here</p>
-          ))}
-      </div>
-    </div>
-  );
-}
-
 const monthOf = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" });
 const TOKENS_BURNT = `${new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 }).format(AI_USAGE.tokens.total)} Claude Code tokens, ${monthOf(AI_USAGE.since)} to ${monthOf(AI_USAGE.asOf)}`;
 
 const ABOUT_FACTS = [
   ["Based in", "San Diego, California"],
-  ["From", "Laos"],
-  ["Studying", "B.S. Computer Science, San Diego State University, expected June 2027"],
-  ["Working", "Founding engineer, stealth startup"],
-  ["Off the clock", "Making music, dreaming about pottery"],
-  ["Burnt so far", TOKENS_BURNT],
+  ["University", "B.S. Computer Science, San Diego State University, expected June 2027"],
+  ["Work", "Founding engineer, stealth startup"],
+  ["Off Work", "Badminton, Balatro, and Music"],
+  ["Born in", "Laos"]
 ];
 
 function AboutApp() {
@@ -269,12 +261,12 @@ function AboutApp() {
     <div className="ab">
       <div>
         <h2 className="app__title app__title--xl">I like to build things and dream about pottery.</h2>
-        <p className="app__lead">A software engineer in San Diego, originally from Laos.</p>
+        <p className="app__lead">A software engineer, potter, and completionist++.</p>
       </div>
       <dl className="ab__facts">
         {ABOUT_FACTS.map(([label, value]) => (
           <div key={label}>
-            <dt className="app__meta">{label}</dt>
+            <dt className="app__label">{label}</dt>
             <dd>{value}</dd>
           </div>
         ))}
@@ -286,11 +278,11 @@ function AboutApp() {
 function ContactApp() {
   return (
     <div className="ct">
-      <h2 className="app__title app__title--xl">Let&rsquo;s chat and grab some coffee.</h2>
+      <h2 className="app__title app__title--xl">Love to talk about anything.</h2>
       <ul className="ct__links">
         {CONTACTS.map((c) => (
           <li key={c.name}>
-            <span className="app__meta">{c.name}</span>
+            <span className="app__label">{c.name}</span>
             <a href={c.href} target={c.href.startsWith("mailto:") ? undefined : "_blank"} rel="noreferrer" data-umami-event={c.event}>
               {c.text}
               <ArrowIcon />
@@ -318,31 +310,119 @@ const store = (key, value) => {
   }
 };
 
-/* ---- Desktop icons, drawn to sit beside the dock's flat tiles: a blue folder and a sheet of text ---- */
-const FolderArt = () => (
-  <svg className="fi__art" viewBox="0 0 64 54" aria-hidden="true">
-    <defs>
-      <linearGradient id="fi-back" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stopColor="#5fc0ff" />
-        <stop offset="1" stopColor="#2f9bf0" />
-      </linearGradient>
-      <linearGradient id="fi-front" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stopColor="#6fcbff" />
-        <stop offset="1" stopColor="#1f86ea" />
-      </linearGradient>
-    </defs>
-    <path d="M3 9a6 6 0 0 1 6-6h14.500a6 6 0 0 1 4.200 1.700l3.100 3.100a4 4 0 0 0 2.800 1.200H55a6 6 0 0 1 6 6v30a6 6 0 0 1-6 6H9a6 6 0 0 1-6-6z" fill="url(#fi-back)" />
-    <path d="M3 20a5 5 0 0 1 5-5h48a5 5 0 0 1 5 5v25a6 6 0 0 1-6 6H9a6 6 0 0 1-6-6z" fill="url(#fi-front)" />
-    <path d="M3.500 20a4.500 4.500 0 0 1 4.500-4.500h48a4.500 4.500 0 0 1 4.500 4.500" fill="none" stroke="#fff" strokeOpacity=".45" />
-  </svg>
-);
-const TextArt = () => (
-  <svg className="fi__art" viewBox="0 0 64 54" aria-hidden="true">
-    <path d="M17 2h22l10 10v36a4 4 0 0 1-4 4H17a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4z" fill="#fff" stroke="#c9c9c6" />
-    <path d="M39 2v7a3 3 0 0 0 3 3h7z" fill="#e9e9e6" stroke="#c9c9c6" strokeLinejoin="round" />
-    <path d="M19 20h20M19 26h24M19 32h17M19 38h22" stroke="#b9b9b5" strokeWidth="1.600" strokeLinecap="round" />
-  </svg>
-);
+/* ---- Clock widget: an analog face of liquid glass showing the time in San Diego, ticking once a second ---- */
+const SD_TIME = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "numeric", second: "numeric", hourCycle: "h23" });
+const SD_LABEL = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit" });
+
+function ClockWidget() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    let timer = 0;
+    // Wake just after each whole second, so the second hand moves in step with the real clock.
+    const step = () => {
+      setNow(new Date());
+      timer = setTimeout(step, 1000 - (Date.now() % 1000) + 5);
+    };
+    timer = setTimeout(step, 1000 - (Date.now() % 1000) + 5);
+    return () => clearTimeout(timer);
+  }, []);
+  const t = Object.fromEntries(SD_TIME.formatToParts(now).map((p) => [p.type, Number(p.value)]));
+  const hour = ((t.hour % 12) + t.minute / 60) * 30;
+  const minute = (t.minute + t.second / 60) * 6;
+  const second = t.second * 6;
+  return (
+    <div className="wg wg--clock" role="img" aria-label={`San Diego, ${SD_LABEL.format(now)}`}>
+      <svg viewBox="0 0 100 100" aria-hidden="true">
+                {Array.from({ length: 60 }, (_, i) => (
+          <line key={i} className={i % 5 ? "wg__tick" : "wg__tick wg__tick--hour"} x1="50" y1="6.5" x2="50" y2={i % 5 ? 9 : 10.5} transform={`rotate(${i * 6} 50 50)`} />
+        ))}
+        {Array.from({ length: 12 }, (_, i) => {
+          const a = ((i + 1) * 30 * Math.PI) / 180;
+          return (
+            <text key={i} className="wg__num" x={50 + Math.sin(a) * 31} y={50 - Math.cos(a) * 31} textAnchor="middle" dominantBaseline="central">
+              {i + 1}
+            </text>
+          );
+        })}
+        <line className="wg__hand" x1="50" y1="50" x2="50" y2="28" strokeWidth="3.4" transform={`rotate(${hour} 50 50)`} />
+        <line className="wg__hand" x1="50" y1="50" x2="50" y2="14" strokeWidth="2.2" transform={`rotate(${minute} 50 50)`} />
+        <circle className="wg__hand-dot" cx="50" cy="50" r="3.6" />
+        <line className="wg__second" x1="50" y1="58" x2="50" y2="11" transform={`rotate(${second} 50 50)`} />
+        <circle className="wg__second-dot" cx="50" cy="50" r="1.6" />
+      </svg>
+    </div>
+  );
+}
+
+/* ---- The menu bar's clock: the day and time in San Diego, like the widgets. ---- */
+const SD_MENU = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+function MenuClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 10000);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <time className="mb__time" title="The time in San Diego">
+      {SD_MENU.format(now).replace(/,/g, "")}
+    </time>
+  );
+}
+
+/* ---- Welcome: what a first-time visitor sees. Who this is, and the two things most people came for. ---- */
+function WelcomeApp({ go }) {
+  return (
+    <div className="wl">
+      <p className="app__meta">Welcome</p>
+      <h2 className="app__title">Hi, I'm Perfect Phanitchaleun.</h2>
+      <p className="app__lead">This is my portfolio website. Please feel free to interact with it like you would with your laptop.</p>
+      <p className="wl__go">
+        <button type="button" onClick={() => go("projects")} data-umami-event="welcome-projects">
+          See the projects
+        </button>
+        <button type="button" onClick={() => go("resume")} data-umami-event="welcome-resume">
+          Read the résumé
+        </button>
+      </p>
+    </div>
+  );
+}
+
+/* ---- Calendar widget: this month, with today marked. It keeps San Diego's date, like the clock beside it. ---- */
+const SD_DATE = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", year: "numeric", month: "numeric", day: "numeric" });
+const MONTH_NAME = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "long" });
+const sdToday = () => SD_DATE.format(new Date());
+
+function CalendarWidget() {
+  const [today, setToday] = useState(sdToday);
+  // Looks once a minute, so the page turns to the next day at midnight without a reload.
+  useEffect(() => {
+    const timer = setInterval(() => setToday(sdToday()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+  const [month, day, year] = today.split("/").map(Number);
+  const first = new Date(Date.UTC(year, month - 1, 1));
+  const days = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const name = MONTH_NAME.format(first);
+  return (
+    <div className="wg wg--cal" role="img" aria-label={`${name} ${day}, ${year}`}>
+      <p>{name}</p>
+      <ol aria-hidden="true">
+        {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+          <li key={`w${i}`} className="wg__dow">
+            {d}
+          </li>
+        ))}
+        {Array.from({ length: days }, (_, i) => (
+          <li key={i} className={i + 1 === day ? "is-today" : undefined} style={i ? undefined : { gridColumnStart: first.getUTCDay() + 1 }}>
+            {i + 1}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
 
 /* ---- boat: a folder of photos. It fills itself from src/assets/boat ---- */
 function BoatFolder() {
@@ -406,11 +486,18 @@ function SailorText() {
   );
 }
 
-/* ---- Résumé: the PDF on the laptop screen, with the download beside it ---- */
+/* ---- Résumé: the pages on the laptop screen, with the download beside it. They're pictures made from the PDF
+   (npm run resume) because the live server won't let the PDF itself be shown in a frame. ---- */
+const RESUME_PAGES = 1;
+
 function ResumeApp() {
   return (
     <div className="rs">
-      <iframe src="/resume.pdf#view=FitH&toolbar=0" title="Résumé of Perfect Phanitchaleun" />
+      <a className="rs__pages" href={RESUME.href} target="_blank" rel="noreferrer" aria-label="Résumé of Perfect Phanitchaleun, opens the PDF">
+        {Array.from({ length: RESUME_PAGES }, (_, i) => (
+          <img key={i} src={`/resume-${i + 1}.png`} alt="" width="1836" height="2376" />
+        ))}
+      </a>
       <a className="rs__get" {...RESUME} data-umami-event-location="resume-app">
         Download
         <DownloadIcon />
@@ -444,71 +531,213 @@ function tick(up) {
 }
 
 
+/* ---- A window. It grows out of its icon when it opens and shrinks back into it when it closes or is minimised,
+   comes to the front when it's clicked, and can be dragged by its title bar. Several can be open at once.
+   Its three lights work: red closes, yellow minimises to the icon, green fills the screen (and gives it back). ---- */
+const clamp = (n, low, high) => Math.min(Math.max(n, low), high);
+const onPhone = () => window.matchMedia("(max-width:760px)").matches;
+
+function AppWindow({ win, name, wide, flush, front, alone, originOf, screenRef, onFocus, onClose, onMin, onMax, onGone, children }) {
+  const ref = useRef(null);
+  const [phase, setPhase] = useState("in");
+  const [origin, setOrigin] = useState({ x: "50%", y: "100%" });
+  // How far it sits from its usual place. Each new window starts a step down and to the right of the last,
+  // so one doesn't land exactly on top of another; dragging moves it from there.
+  const [at, setAt] = useState({ x: win.slot * 26, y: win.slot * 14 });
+  // Off the screen: on its way out for good, or tucked into its icon.
+  const away = win.closing || win.min;
+
+  // Where its icon is, measured as it opens and again as it leaves.
+  useLayoutEffect(() => {
+    const from = originOf(win.id);
+    if (from) setOrigin(from);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [away]);
+
+  useEffect(() => {
+    const el = ref.current;
+    const zoom = el.getAnimations().find((a) => a.animationName === "appIn");
+    const opening = zoom?.playState === "running";
+    if (!away) {
+      // Back on screen. If the opening zoom was played backwards to put it away, play it forwards again.
+      if (zoom) {
+        zoom.playbackRate = 1;
+        if (!opening && zoom.currentTime === 0) zoom.play();
+      }
+      setPhase("in");
+      return;
+    }
+    // Sent away before it finished opening: play the opening backwards from where it is, rather than
+    // jumping to full size for a frame and then shrinking.
+    if (opening) zoom.playbackRate = -2;
+    else setPhase("out");
+    // The keyboard goes back to the icon it came from when the last window leaves.
+    if (alone && el.contains(document.activeElement)) screenRef.current?.querySelector(`[data-app="${win.id}"] :is(button,a)`)?.focus({ preventScroll: true });
+    if (!win.closing) return;
+    const t = setTimeout(() => onGone(win.id), 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [away, win.closing]);
+
+  // The keyboard follows the window in front: opening one, or bringing one forward, moves focus into it.
+  useEffect(() => {
+    const el = ref.current;
+    if (front && !el.contains(document.activeElement)) el.focus({ preventScroll: true });
+  }, [front]);
+
+  // Dragging by the title bar. The window may slide partly off the screen, but never so far that its bar
+  // can't be reached, and never under the menu bar. A window that fills the screen, or the phone, stays put.
+  const drag = (e) => {
+    const el = ref.current;
+    const r = el.getBoundingClientRect();
+    const b = screenRef.current.getBoundingClientRect();
+    const top = b.top + (screenRef.current.querySelector(".mb")?.offsetHeight ?? 0);
+    const start = { px: e.clientX, py: e.clientY, ...at };
+    let next = at;
+    const move = (ev) => {
+      next = {
+        x: start.x + clamp(ev.clientX - start.px, b.left - r.right + 120, b.right - r.left - 120),
+        y: start.y + clamp(ev.clientY - start.py, top - r.top, b.bottom - r.top - 110),
+      };
+      el.style.setProperty("--dx", `${next.x}px`);
+      el.style.setProperty("--dy", `${next.y}px`);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      setAt(next);
+    };
+    e.preventDefault();
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  };
+  // Any press brings the window forward. A press on its title bar (but not on a light) also starts a drag.
+  // It's read from where the press landed, not from the bar itself, because a window behind another has its
+  // insides switched off and the press arrives on the frame.
+  const onPointerDown = (e) => {
+    onFocus(win.id);
+    if (e.button !== 0 || win.max || onPhone() || e.target.closest("button")) return;
+    if (e.clientY <= ref.current.firstElementChild.getBoundingClientRect().bottom) drag(e);
+  };
+
+  return (
+    <section
+      className="app"
+      ref={ref}
+      tabIndex={-1}
+      inert={away}
+      data-id={win.id}
+      data-wide={wide ? "" : undefined}
+      data-front={front ? "" : undefined}
+      data-max={win.max ? "" : undefined}
+      data-phase={phase}
+      aria-label={name}
+      style={{ zIndex: win.z, "--ox": origin.x, "--oy": origin.y, "--dx": win.max ? "0px" : `${at.x}px`, "--dy": win.max ? "0px" : `${at.y}px` }}
+      onPointerDown={onPointerDown}
+    >
+      {/* Only the window in front can be typed in, tabbed through or clicked; the rest wait to be brought forward. */}
+      <header className="app__bar" inert={!front} onDoubleClick={(e) => !e.target.closest("button") && !onPhone() && onMax(win.id)}>
+        <button type="button" className="app__close" onClick={() => onClose(win.id)} aria-label={`Close ${name}`} />
+        <button type="button" className="app__min" onClick={() => onMin(win.id)} aria-label={`Minimise ${name}`} />
+        <button type="button" className="app__max" onClick={() => onMax(win.id)} aria-label={win.max ? `Shrink ${name} back` : `Fill the screen with ${name}`} />
+        <p>{name}</p>
+      </header>
+      <div className={flush ? "app__body app__body--flush" : "app__body"} inert={!front}>
+        <Suspense fallback={null}>{children}</Suspense>
+      </div>
+    </section>
+  );
+}
+
 export default function Stage() {
   const [theme, setTheme] = useStageTheme();
-  const [viewId, setViewId] = useState(() => readRoute().view);
+  // The open windows, in the order they were opened. "z" says which is in front, "slot" where a new one first
+  // sits, "min" that it's tucked into its icon, "max" that it fills the screen, and a closing one stays in the
+  // list until its zoom has finished.
+  const [wins, setWins] = useState(() => {
+    const view = readRoute().view;
+    return view === "home" ? [] : [{ id: view, z: 1, slot: 0, closing: false, min: false, max: false }];
+  });
+  // The windows on screen: not on their way out, and not minimised.
+  const live = wins.filter((w) => !w.closing && !w.min);
+  const frontWin = live.reduce((top, w) => (top && top.z > w.z ? top : w), null);
+  // The window in front, which is the one the address bar names and the keys act on; "home" when none is open.
+  const viewId = frontWin?.id ?? "home";
+  // A minimised app is still open: its dock icon keeps its dot, and clicking it brings the window back.
+  const isOpen = (id) => wins.some((w) => w.id === id && !w.closing);
+  const raised = (ws, id) => {
+    const top = Math.max(0, ...ws.map((w) => w.z));
+    return ws.map((w) => (w.id === id ? { ...w, z: w.z === top ? top : top + 1, closing: false, min: false } : w));
+  };
+  // Opening an app that is already open brings its window to the front (and back out of its icon). Opening
+  // anything also puts away the first-visit hint and any menu or dock folder that was showing.
+  const openWin = (id) => {
+    setNudge(false);
+    store("stage-nudge", "1");
+    setStack(null);
+    setMenu(null);
+    if (MINI.some((m) => m.id === id)) (id === "obsidian" ? loadObsidian : loadMini)();
+    setWins((ws) => {
+      if (ws.some((w) => w.id === id)) return raised(ws, id);
+      const used = ws.filter((w) => !w.closing).map((w) => w.slot);
+      const slot = [0, 1, 2, 3].find((n) => !used.includes(n)) ?? ws.length % 4;
+      return [...ws, { id, z: Math.max(0, ...ws.map((w) => w.z)) + 1, slot, closing: false, min: false, max: false }];
+    });
+  };
+  const raiseWin = (id) => setWins((ws) => (ws.some((w) => w.id === id && !w.closing && !w.min && w.z < Math.max(...ws.map((x) => x.z))) ? raised(ws, id) : ws));
+  const minWin = (id) => setWins((ws) => ws.map((w) => (w.id === id ? { ...w, min: true } : w)));
+  const maxWin = (id) => setWins((ws) => ws.map((w) => (w.id === id ? { ...w, max: !w.max } : w)));
+  const closeWin = (id) => setWins((ws) => ws.map((w) => (w.id === id ? { ...w, closing: true } : w)));
+  const closeAll = () => setWins((ws) => ws.map((w) => ({ ...w, closing: true })));
+  const dropWin = (id) => setWins((ws) => ws.filter((w) => !(w.id === id && w.closing)));
   // Projects reopens on the project that was last on screen, even on a later visit.
   const [index, setIndex] = useState(() => readRoute().index ?? Math.max(0, PROJECT_SLUGS.indexOf(stored("stage-project"))));
   // A first-time visitor gets one quiet line above the dock until they open something.
-  const [nudge, setNudge] = useState(() => stored("stage-nudge") !== "1");
+  const [nudge, setNudge] = useState(() => stored("stage-nudge") !== "1" && readRoute().view === "home");
   const [musicSlot, setMusicSlot] = useState(null);
-  const opened = useRef(false);
-  // The app on screen. It trails viewId by the length of the closing zoom, so the app can animate away.
-  const [appId, setAppId] = useState(() => (readRoute().view === "home" ? null : readRoute().view));
-  const [phase, setPhase] = useState("in");
-  const [origin, setOrigin] = useState({ x: "50%", y: "100%" });
+  const openCount = useRef(null);
   const [hint, setHint] = useState(null);
   const lastView = useRef(null);
   const listRef = useRef(null);
   const stageRef = useRef(null);
   const screenRef = useRef(null);
-  const appRef = useRef(null);
   const touch = useRef(null);
   useAnalytics();
 
-  const openProject = (i) => {
-    setIndex(i);
-    setViewId("projects");
+  // The iPod pops up over the desktop from the dock's Music app, and can be dragged anywhere on the screen.
+  const [ipodOpen, setIpodOpen] = useState(false);
+  const [ipodAt, setIpodAt] = useState({ x: 0, y: 0 });
+  // The dock folder whose grid is open, if any, and the menu-bar menu that is.
+  const [stack, setStack] = useState(null);
+  const [menu, setMenu] = useState(null);
+  const menuRef = useRef(null);
+  // The note a dock app pops up ("lol"), if one is showing.
+  const [alert, setAlert] = useState(null);
+  // The folder Finder opens on. The terminal's "open" can send Finder somewhere else.
+  const [finderAt, setFinderAt] = useState([]);
+  const drive = useMemo(() => makeDrive({ sections: APPS, links: LINKS, photos: BOAT_PHOTOS }), []);
+  const dockRef = useRef(null);
+  const stackRef = useRef(null);
+  const ipwRef = useRef(null);
+
+  // Where a window's icon is, for it to zoom out of and back into. In pixels from the screen's corner (the page's,
+  // on a phone, where a window fills the whole page), because a window doesn't fill the screen.
+  const originOf = (id) => {
+    const screen = screenRef.current;
+    const tile = screen?.querySelector(`[data-app="${id}"] :is(.dk__tile,.da__tile,.fi__art,.mb__boat)`);
+    if (!tile) return null;
+    const s = window.matchMedia("(max-width:760px)").matches ? { left: 0, top: 0 } : screen.getBoundingClientRect();
+    const t = tile.getBoundingClientRect();
+    return { x: `${(t.left + t.width / 2 - s.left).toFixed(1)}px`, y: `${(t.top + t.height / 2 - s.top).toFixed(1)}px` };
   };
 
-  // Open and close like an app: the window grows out of its dock icon, and shrinks back into it.
+  // A tick as a window opens or closes, skipped for whatever is on screen when the page loads.
   useEffect(() => {
-    const screen = screenRef.current;
-    const from = (id) => {
-      const tile = screen?.querySelector(`[data-app="${id}"] :is(.dk__tile,.fi__art)`);
-      if (!tile) return;
-      const s = screen.getBoundingClientRect();
-      const t = tile.getBoundingClientRect();
-      setOrigin({ x: `${(((t.left + t.width / 2 - s.left) / s.width) * 100).toFixed(2)}%`, y: `${(((t.top + t.height / 2 - s.top) / s.height) * 100).toFixed(2)}%` });
-    };
-    // The opening zoom, if it is still playing.
-    const opening = appRef.current?.getAnimations().find((a) => a.animationName === "appIn" && a.playState === "running");
-    if (viewId === "home") {
-      if (!appId) return;
-      // Closed before it finished opening: play the opening backwards from where it is, rather than
-      // jumping to full size for a frame and then shrinking.
-      if (opening) opening.playbackRate = -2;
-      else {
-        from(appId);
-        setPhase("out");
-      }
-      const t = setTimeout(() => setAppId(null), 300);
-      return () => clearTimeout(t);
-    }
-    if (opening && viewId === appId) opening.playbackRate = 1;
-    from(viewId);
-    setPhase("in");
-    setAppId(viewId);
-    setNudge(false);
-    store("stage-nudge", "1");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewId]);
-
-  // The tick is skipped for whatever is on screen when the page loads.
-  useEffect(() => {
-    if (opened.current) tick(viewId !== "home");
-    opened.current = true;
-  }, [viewId]);
+    if (openCount.current !== null && openCount.current !== live.length) tick(live.length > openCount.current);
+    openCount.current = live.length;
+  }, [live.length]);
 
   useEffect(() => {
     store("stage-project", PROJECT_SLUGS[index]);
@@ -526,7 +755,17 @@ export default function Stage() {
     } catch {
       /* storage unavailable */
     }
-    if (!mac || readRoute().view !== "home" || (seen && !replay) || window.innerWidth <= 760 || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    // A first-time visitor gets the Welcome note, once: straight away when there is no intro to wait for,
+    // otherwise as the intro ends.
+    const greet = () => {
+      if (stored("stage-welcome") === "1" || readRoute().view !== "home") return;
+      store("stage-welcome", "1");
+      openWin("welcome");
+    };
+    if (!mac || readRoute().view !== "home" || (seen && !replay) || window.innerWidth <= 760 || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      const soon = setTimeout(greet, 500);
+      return () => clearTimeout(soon);
+    }
     let timer = 0;
     let frame = 0;
     const end = () => {
@@ -541,6 +780,7 @@ export default function Stage() {
       } catch {
         /* storage unavailable */
       }
+      greet();
     };
     // Hold everything but the name for one frame so the laptop is measured where it finally sits.
     stage.setAttribute("data-intro-wait", "");
@@ -569,13 +809,13 @@ export default function Stage() {
     };
   }, []);
 
-  // Keep the address in step with what is on screen. Changing app adds a history entry; flipping through
-  // projects replaces it, so "back" leaves the app instead of rewinding one project at a time.
+  // Keep the address in step with the window in front. Opening the first window adds a history entry; everything
+  // after that (another window, the next project) replaces it, so "back" returns to the bare desktop.
   useEffect(() => {
     const target = viewId === "home" ? "" : viewId === "projects" ? `#/projects/${PROJECT_SLUGS[index]}` : `#/${viewId}`;
     const first = lastView.current === null;
     if (window.location.hash !== target) {
-      const write = first || lastView.current === viewId ? "replaceState" : "pushState";
+      const write = !first && lastView.current === "home" ? "pushState" : "replaceState";
       window.history[write](null, "", target || window.location.pathname + window.location.search);
     }
     lastView.current = viewId;
@@ -585,7 +825,8 @@ export default function Stage() {
     const sync = () => {
       const route = readRoute();
       lastView.current = route.view;
-      setViewId(route.view);
+      if (route.view === "home") closeAll();
+      else openWin(route.view);
       if (route.index !== null) setIndex(route.index);
     };
     window.addEventListener("popstate", sync);
@@ -596,12 +837,12 @@ export default function Stage() {
     };
   }, []);
 
-  // Escape closes the open app. In Projects, the arrow keys step through the projects.
+  // Escape closes the window in front. When that is Projects, the arrow keys step through the projects.
   useEffect(() => {
-    if (viewId === "home") return;
+    if (viewId === "home" || menu) return;
     const onKey = (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.("input,textarea,select,.dock")) return;
-      if (e.key === "Escape") return setViewId("home");
+      if (e.key === "Escape") return closeWin(viewId);
       if (viewId !== "projects") return;
       const d = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : 0;
       if (!d) return;
@@ -618,7 +859,34 @@ export default function Stage() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("pointermove", onMove);
     };
-  }, [viewId]);
+  }, [viewId, menu]);
+
+  // A menu closes on a click anywhere else, or on Escape.
+  useEffect(() => {
+    if (!menu) return;
+    const onDown = (e) => {
+      if (!menuRef.current?.contains(e.target)) setMenu(null);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") setMenu(null);
+    };
+    document.addEventListener("pointerdown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [menu]);
+
+  // Fetch the dock's small apps once the page has gone quiet, so the first one opens without a wait.
+  useEffect(() => {
+    const warm = () => {
+      loadMini();
+      loadObsidian();
+    };
+    const idle = window.requestIdleCallback ? window.requestIdleCallback(warm, { timeout: 4000 }) : setTimeout(warm, 2500);
+    return () => (window.cancelIdleCallback ? window.cancelIdleCallback(idle) : clearTimeout(idle));
+  }, []);
 
   // Keyboard focus follows the selection, so the focus ring never sits on a different name than the highlight.
   useEffect(() => {
@@ -640,17 +908,166 @@ export default function Stage() {
     if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(t.clientY - from.y) * 1.6) setIndex((i) => (i + (dx < 0 ? 1 : -1) + PROJECTS.length) % PROJECTS.length);
   };
 
-  const app = WINDOWS.find((a) => a.id === appId);
-  const hinting = { onPointerLeave: () => setHint(null), onBlur: () => setHint(null) };
+  // A dock folder's grid sits above its icon, kept inside the screen; its little point stays on the icon.
+  useLayoutEffect(() => {
+    const pop = stackRef.current;
+    const dock = dockRef.current;
+    const icon = dock?.querySelector(`[data-stack="${stack}"] .dk__tile`);
+    if (!pop || !icon) return;
+    const d = dock.getBoundingClientRect();
+    const s = screenRef.current.getBoundingClientRect();
+    const i = icon.getBoundingClientRect();
+    const middle = i.left + i.width / 2;
+    const left = Math.min(Math.max(middle - pop.offsetWidth / 2, s.left + 10), s.right - 10 - pop.offsetWidth);
+    pop.style.left = `${left - d.left}px`;
+    pop.style.setProperty("--tip", `${middle - left}px`);
+  }, [stack]);
+
+  // It closes on a click anywhere else, on Escape, or when an app opens.
+  useEffect(() => {
+    if (!stack) return;
+    const onDown = (e) => {
+      if (!e.target.closest?.(".stk,[data-stack]")) setStack(null);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") setStack(null);
+    };
+    document.addEventListener("pointerdown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [stack]);
+
+  // The pop-up note closes on Escape, as well as on its button.
+  useEffect(() => {
+    if (!alert) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") setAlert(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [alert]);
+
+  // Opening something from Finder, the terminal or the stand-in Claude: a folder goes to Finder, a project to
+  // Projects, an app or file to its own window, and a web location to a new tab.
+  const openNode = (node, path = []) => {
+    if (node.kind === "folder") {
+      setFinderAt(path);
+      openWin("finder");
+    } else if (node.kind === "project" || node.project !== undefined) {
+      setIndex(node.index ?? node.project);
+      openWin("projects");
+    } else if (node.app) openWin(node.app);
+    else if (node.href) window.open(node.href, "_blank", "noopener");
+  };
+
+  // Dragging the iPod by its body (not its buttons, links, track list, volume or click wheel). It can't leave the screen, or on a
+  // phone the window. It moves by its style while dragged, and its place is kept when let go.
+  // A plain DOM listener: the iPod's insides are drawn by the music player through a portal, so React would
+  // hand their events to the music player in the left column, not to this window.
+  const dragIpod = (e, el) => {
+    if (e.button !== 0 || e.target.closest("button,a,input,.ipod__list,.ipod__wheel")) return;
+    const r = el.getBoundingClientRect();
+    const b = getComputedStyle(el).position === "fixed" ? { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight } : screenRef.current.getBoundingClientRect();
+    const start = { px: e.clientX, py: e.clientY, ...ipodAt };
+    let at = ipodAt;
+    const move = (ev) => {
+      const dx = Math.min(Math.max(ev.clientX - start.px, b.left - r.left), b.right - r.right);
+      const dy = Math.min(Math.max(ev.clientY - start.py, b.top - r.top), b.bottom - r.bottom);
+      at = { x: start.x + dx, y: start.y + dy };
+      el.style.translate = `${at.x}px ${at.y}px`;
+    };
+    // Followed on the window, so a quick drag that outruns the iPod still moves it.
+    const up = () => {
+      el.classList.remove("is-dragging");
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      setIpodAt(at);
+    };
+    e.preventDefault();
+    el.classList.add("is-dragging");
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  };
+
+  useEffect(() => {
+    const el = ipwRef.current;
+    if (!el) return;
+    const onDown = (e) => dragIpod(e, el);
+    el.addEventListener("pointerdown", onDown);
+    return () => el.removeEventListener("pointerdown", onDown);
+  });
+
+  // What goes inside each window.
+  const bodyOf = (id) => {
+    switch (id) {
+      case "projects":
+        return <ProjectsApp index={index} setIndex={setIndex} listRef={listRef} />;
+      case "experience":
+        return <ExperienceApp />;
+      case "about":
+        return <AboutApp />;
+      case "contact":
+        return <ContactApp />;
+      case "resume":
+        return <ResumeApp />;
+      case "boat":
+        return <BoatFolder />;
+      case "sailor":
+        return <SailorText />;
+      case "welcome":
+        return (
+          <WelcomeApp
+            go={(id) => {
+              closeWin("welcome");
+              openWin(id);
+            }}
+          />
+        );
+      case "obsidian":
+        return <Obsidian email={EMAIL} />;
+      default:
+        // The rest are the dock's small apps, which arrive together in one file of their own.
+        return <MiniApp id={id} drive={drive} finderAt={finderAt} email={EMAIL} links={LINKS} more={SAFARI_MORE} onOpen={openNode} onExit={() => closeWin("ghostty")} readText={() => stored("stage-sailor") ?? SAILOR_ORIGINAL} />;
+    }
+  };
+  // The menu bar's menus. Each item says what it does; "on" ticks it and "off" greys it out.
+  const menus = [
+    {
+      id: "file",
+      name: "File",
+      items: [
+        { name: "Close Window", keys: "esc", off: !frontWin, run: () => closeWin(viewId) },
+        { name: "Minimise", off: !frontWin, run: () => minWin(viewId) },
+        { name: frontWin?.max ? "Shrink Back" : "Fill the Screen", off: !frontWin, run: () => maxWin(viewId) },
+        { name: "Close All Windows", off: !wins.length, run: closeAll },
+      ],
+    },
+    { id: "go", name: "Go", items: [...APPS, WELCOME].map((a) => ({ name: a.name, run: () => openWin(a.id) })) },
+    { id: "view", name: "View", items: THEMES.map((t) => ({ name: t.name, on: t.id === theme, run: () => setTheme(t.id) })) },
+    {
+      id: "window",
+      name: "Window",
+      items: wins.some((w) => !w.closing)
+        ? wins.filter((w) => !w.closing).map((w) => ({ name: WINDOWS.find((a) => a.id === w.id).name, on: w === frontWin, run: () => openWin(w.id) }))
+        : [{ name: "No windows open", off: true }],
+    },
+  ];
+  const openStack = STACKS.find((s) => s.id === stack);
+  const hinting ={ onPointerLeave: () => setHint(null), onBlur: () => setHint(null) };
 
   return (
-    <div className="site stage" ref={stageRef} data-open={app ? "" : undefined}>
+    <div className="site stage" ref={stageRef} data-open={wins.length ? "" : undefined}>
       <style>{BASE_CSS + DOCK_CSS + STAGE_CSS}</style>
 
       <div className="stage__top">
         <header className="stage__head">
           <h1 className="stage__mark">
-            <button type="button" onClick={() => setViewId("home")} aria-label="Perfect Phanitchaleun, back to the desktop">
+            <button type="button" onClick={closeAll} aria-label="Perfect Phanitchaleun, back to the desktop">
               Perfect <br className="stage__br" />
               Phanitchaleun.
             </button>
@@ -668,7 +1085,7 @@ export default function Stage() {
         <div className="stage__nav">
           <nav aria-label="Primary" className={hint ? "has-hint" : undefined}>
             {NAV.map((a) => (
-              <button key={a.id} type="button" className={hint === a.id ? "is-hint" : undefined} aria-current={a.id === viewId ? "page" : undefined} onClick={() => setViewId(a.id)} data-umami-event={`view-${a.id}`}>
+              <button key={a.id} type="button" className={hint === a.id ? "is-hint" : undefined} aria-current={a.id === viewId ? "page" : undefined} onClick={() => openWin(a.id)} data-umami-event={`view-${a.id}`}>
                 {a.name.toLowerCase()}
               </button>
             ))}
@@ -690,7 +1107,7 @@ export default function Stage() {
                 />
               ))}
             </div>
-            <SoundDock slot={appId === "music" ? musicSlot : null} onOpen={() => setViewId(viewId === "music" ? "home" : "music")} />
+            <SoundDock slot={musicSlot} ipod />
           </div>
         </div>
         <div className="stage__base">
@@ -711,59 +1128,188 @@ export default function Stage() {
       <main id="top" className="stage__main" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
         <div className="stage__mac">
           <div className="stage__lid">
-            <div className="stage__screen" ref={screenRef} style={{ "--ox": origin.x, "--oy": origin.y }}>
-              {/* the desktop: three slow lights and the dock */}
-              <div className="desk" inert={app ? "" : undefined}>
+            <div className="stage__screen" ref={screenRef}>
+              {/* the desktop: three slow lights, the clock, the files and the dock */}
+              <div className="desk">
                 <div className="desk__lights" aria-hidden="true">
                   <i />
                   <i />
                   <i />
                 </div>
+                {/* widgets in the top left corner: the clock and the calendar */}
+                <div className="desk__widgets">
+                  <ClockWidget />
+                  <CalendarWidget />
+                </div>
                 <ul className="desk__files" aria-label="On the desktop">
                   {FILES.map((f) => (
                     <li key={f.id} data-app={f.id}>
-                      <button type="button" onClick={() => setViewId(f.id)} data-umami-event={`desktop-${f.id}`}>
+                      <button type="button" onClick={() => openWin(f.id)} data-umami-event={`desktop-${f.id}`}>
                         {f.kind === "folder" ? <FolderArt /> : <TextArt />}
                         <b>{f.name}</b>
                       </button>
                     </li>
                   ))}
                 </ul>
-                <nav className="dk" aria-label="Sections">
+                {/* the sections, as apps in the middle of the desktop */}
+                <ul className="desk__apps" aria-label="Sections">
+                  {APPS.map((a) => (
+                    <li key={a.id} data-app={a.id}>
+                      <button type="button" onClick={() => openWin(a.id)} onPointerEnter={() => setHint(a.id)} onFocus={() => setHint(a.id)} {...hinting} data-umami-event={`home-${a.id}`}>
+                        <span className="da__tile">
+                          <AppIcon id={a.id} />
+                        </span>
+                        <b>{a.name}</b>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                {/* the dock, like a Mac's: Finder and Music, my own apps, then two folders */}
+                <nav className="dk" aria-label="Dock" ref={dockRef}>
                   {nudge && <p className="dk__nudge">Pick one to open it</p>}
                   <ul className="dk__dock">
-                    {APPS.map((a) => (
-                      <li key={a.id} data-app={a.id}>
-                        <button type="button" onClick={() => setViewId(a.id)} onPointerEnter={() => setHint(a.id)} onFocus={() => setHint(a.id)} {...hinting} data-umami-event={`home-${a.id}`}>
-                          <span className="dk__tile">
-                            <AppIcon id={a.id} />
+                    <li data-app="finder" className={isOpen("finder") ? "is-running" : undefined}>
+                      <button type="button" onClick={() => openWin("finder")} data-umami-event="dock-finder">
+                        <img className="dk__tile" src="/icons/dock/finder.png" alt="" width="96" height="96" />
+                        <b>Finder</b>
+                      </button>
+                    </li>
+                    <li data-app="music" className={ipodOpen ? "is-running" : undefined}>
+                      <button type="button" aria-pressed={ipodOpen} onClick={() => setIpodOpen((o) => !o)} data-umami-event="home-music">
+                        <span className="dk__tile">
+                          <MusicArt />
+                        </span>
+                        <b>Music</b>
+                      </button>
+                    </li>
+                    <li className="dk__sep" aria-hidden="true" />
+                    {DOCK_EXTRAS.map((x) => {
+                      const face = (
+                        <>
+                          <img className="dk__tile" src={`/icons/dock/${x.id}.png`} alt="" width="96" height="96" />
+                          <b>{x.name}</b>
+                        </>
+                      );
+                      return (
+                        <li key={x.id} data-app={x.app ? x.id : undefined} className={isOpen(x.id) ? "is-running" : undefined}>
+                          {x.href ? (
+                            <a href={x.href} target="_blank" rel="noreferrer" data-umami-event={`dock-${x.id}`}>
+                              {face}
+                            </a>
+                          ) : (
+                            <button type="button" onClick={() => (x.app ? openWin(x.id) : setAlert(x))} data-umami-event={`dock-${x.id}`}>
+                              {face}
+                            </button>
+                          )}
+                        </li>
+                      );
+                    })}
+                    <li className="dk__sep" aria-hidden="true" />
+                    {STACKS.map((f) => (
+                      <li key={f.id} data-stack={f.id}>
+                        <button type="button" aria-expanded={stack === f.id} onClick={() => setStack((open) => (open === f.id ? null : f.id))} data-umami-event={`stack-${f.id}`}>
+                          <span className="dk__tile dk__tile--folder">
+                            <FolderArt />
                           </span>
-                          <b>{a.name}</b>
+                          <b>{f.name}</b>
                         </button>
                       </li>
                     ))}
                   </ul>
+                  {openStack && (
+                    <div className="stk" ref={stackRef} role="dialog" aria-label={openStack.name}>
+                      <p className="stk__title">{openStack.name}</p>
+                      {openStack.items.length ? (
+                        <ul className="stk__grid" style={{ "--n": openStack.items.length }}>
+                          {openStack.items.map((l) => (
+                            <li key={l.id}>
+                              <a href={l.href} target="_blank" rel="noreferrer" data-umami-event={`stack-${l.id}`}>
+                                <img src={l.icon} alt="" width="64" height="64" />
+                                <b>{l.name}</b>
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="stk__empty">Nothing in here yet.</p>
+                      )}
+                    </div>
+                  )}
                 </nav>
               </div>
 
-              {app && (
-                <section className="app" ref={appRef} key={app.id} data-phase={phase} aria-label={app.name}>
-                  <header className="app__bar">
-                    <button type="button" className="app__close" onClick={() => setViewId("home")} aria-label={`Close ${app.name}`} />
-                    <p>{app.name}</p>
-                  </header>
-                  <div className="app__body">
-                    {app.id === "projects" && <ProjectsApp index={index} setIndex={setIndex} listRef={listRef} />}
-                    {app.id === "experience" && <ExperienceApp />}
-                    {app.id === "stack" && <StackApp openProject={openProject} />}
-                    {app.id === "about" && <AboutApp />}
-                    {app.id === "contact" && <ContactApp />}
-                    {app.id === "music" && <div className="mu" ref={setMusicSlot} />}
-                    {app.id === "resume" && <ResumeApp />}
-                    {app.id === "boat" && <BoatFolder />}
-                    {app.id === "sailor" && <SailorText />}
+              {/* the open windows; the one clicked last is in front */}
+              <div className="wins">
+                {wins.map((w) => {
+                  const app = WINDOWS.find((a) => a.id === w.id);
+                  return (
+                    <AppWindow key={w.id} win={w} name={app.name} wide={APPS.includes(app)} flush={MINI.includes(app)} front={w === frontWin} alone={!frontWin} originOf={originOf} screenRef={screenRef} onFocus={raiseWin} onClose={closeWin} onMin={minWin} onMax={maxWin} onGone={dropWin}>
+                      {bodyOf(w.id)}
+                    </AppWindow>
+                  );
+                })}
+              </div>
+
+              {/* the menu bar: the boat opens Welcome, then the app in front, working menus, and San Diego's time */}
+              <div className="mb" ref={menuRef}>
+                <span data-app="welcome">
+                  <button type="button" className="mb__logo" onClick={() => openWin("welcome")} aria-label="About this laptop">
+                    <svg className="mb__boat" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M11.500 3v12.500H4.500zM13 6.500v9h5.500zM2.500 17.500h19l-2.800 3.500H5.300z" />
+                    </svg>
+                  </button>
+                </span>
+                <b className="mb__app">{frontWin ? WINDOWS.find((a) => a.id === viewId).name : "Desktop"}</b>
+                {menus.map((m) => (
+                  <div key={m.id} className="mb__menu">
+                    <button type="button" aria-haspopup="menu" aria-expanded={menu === m.id} onClick={() => setMenu(menu === m.id ? null : m.id)} onPointerEnter={() => menu && setMenu(m.id)}>
+                      {m.name}
+                    </button>
+                    {menu === m.id && (
+                      <ul role="menu" aria-label={m.name}>
+                        {m.items.map((item) => (
+                          <li key={item.name} role="none">
+                            <button
+                              type="button"
+                              role={item.on === undefined ? "menuitem" : "menuitemradio"}
+                              aria-checked={item.on}
+                              disabled={item.off}
+                              onClick={() => {
+                                setMenu(null);
+                                item.run();
+                              }}
+                            >
+                              <i aria-hidden="true">{item.on ? "✓" : ""}</i>
+                              {item.name}
+                              {item.keys && <kbd>{item.keys}</kbd>}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
-                </section>
+                ))}
+                <MenuClock />
+              </div>
+
+              {/* a note popped up by a dock app */}
+              {alert && (
+                <div className="al" role="alertdialog" aria-label={`${alert.name}: ${alert.alert}`}>
+                  <img src={`/icons/dock/${alert.id}.png`} alt="" width="64" height="64" />
+                  <p>{alert.alert}</p>
+                  <span>{alert.name}</span>
+                  <button type="button" autoFocus onClick={() => setAlert(null)}>
+                    OK
+                  </button>
+                </div>
+              )}
+
+              {/* the iPod, popped up from the dock's Music app. Drag it by its body to move it. */}
+              {ipodOpen && (
+                <div className="ipw" ref={ipwRef} style={{ translate: `${ipodAt.x}px ${ipodAt.y}px` }}>
+                  <button type="button" className="ipw__close" onClick={() => setIpodOpen(false)} aria-label="Close the music player" />
+                  <div ref={setMusicSlot} />
+                </div>
               )}
             </div>
           </div>
@@ -833,6 +1379,9 @@ const STAGE_CSS = `
   --brand:#f4f4f2;--accent-fill:#f4f4f2;--accent:#f4f4f2;--card-ink:#f4f4f2;--on-accent:#0a0a0a;--ink-on-light:#0a0a0a;
   --text:#f4f4f2;--muted:#a6a6a2;--dim:#a6a6a2;--tagline:#a6a6a2;--shadow:#000;--line:rgba(244,244,242,.2);
 }
+/* liquid glass: a thin tint, a strong blur and saturation behind it, and a bright rim where light catches the edge */
+:root[data-stage]{--glass:rgba(255,255,255,.2);--rim:rgba(255,255,255,.85);--rim-soft:rgba(255,255,255,.35);--glass-edge:rgba(0,0,0,.1);}
+:root[data-stage]:is([data-theme="black"],[data-theme="mustard"]){--glass:rgba(60,60,60,.22);--rim:rgba(255,255,255,.3);--rim-soft:rgba(255,255,255,.1);--glass-edge:rgba(0,0,0,.45);}
 .stage{
   font-synthesis:none;
   height:100svh;min-height:560px;overflow:hidden;
@@ -854,7 +1403,7 @@ const STAGE_CSS = `
 .stage__role span{display:block;}
 /* ---- the nav and tools: in the left column, above the résumé ---- */
 .stage__nav{display:flex;flex-direction:column;align-items:flex-start;gap:16px;}
-.stage__nav nav{display:flex;flex-direction:column;align-items:flex-start;}
+.stage__nav nav{display:none;flex-direction:column;align-items:flex-start;} /* hidden for now: display:flex brings it back */
 .stage__nav nav :is(button,a){
   position:relative;padding:0;border:none;background:none;cursor:pointer;white-space:nowrap;
   font-size:17px;line-height:1.35;font-weight:400;letter-spacing:-.005em;color:var(--muted);text-decoration:none;
@@ -914,12 +1463,15 @@ const STAGE_CSS = `
   font-family:var(--font-body);font-size:12.5px;line-height:1.4;color:var(--muted);
 }
 .stage__foot .footer__visits{display:inline-flex;align-items:center;gap:7px;}
-.stage__archive{display:none;}
+.stage__archive{align-self:flex-start;margin-top:8px;font-family:var(--font-body);font-size:14px;font-weight:500;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px;}
 
 /* ---- the laptop: always on the page, in every section. It keeps a laptop's proportions (about 16:10) and
    is sized to fit the room it has, so a very wide window gets a bigger laptop, not a stretched one. ---- */
 .stage__main{grid-column:2;grid-row:1/-1;min-height:0;min-width:0;display:grid;place-items:center;container-type:size;margin:26px var(--pad) 26px 0;}
-.stage__mac{position:relative;width:min(100cqw,100cqh * 1.56);aspect-ratio:1.56;min-height:0;min-width:0;transform-origin:50% 100%;}
+.stage__mac{
+  /* the screen's width, near enough, and the dock's icon size from it, so the whole dock always fits */
+  --sw:min(100cqw,156cqh);--ic:clamp(26px,calc(var(--sw) * .046),60px);--desk-pad:clamp(16px,2.6vw,38px);--mb:clamp(22px,calc(var(--ic) * .52),28px);
+  position:relative;width:min(100cqw,100cqh * 1.56);aspect-ratio:1.56;min-height:0;min-width:0;transform-origin:50% 100%;}
 .stage__lid{
   position:relative;height:100%;padding:11px;border-radius:var(--round);background:#161617;transform-origin:50% 100%;
   /* no light inner ring and no light screen backing: either one shows as pale pixels where the corners curve */
@@ -935,7 +1487,7 @@ const STAGE_CSS = `
 .stage__screen::before{content:"";position:absolute;inset:0;z-index:-1;background:var(--bg);transform:translateZ(0);pointer-events:none;}
 
 /* ---- the desktop: three lights drifting like a lava lamp, and the dock ---- */
-.desk{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;padding:clamp(16px,2.6vw,38px);}
+.desk{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;padding:calc(var(--desk-pad) + var(--mb)) var(--desk-pad) var(--desk-pad);}
 .desk__lights{position:absolute;inset:0;overflow:hidden;filter:blur(clamp(36px,5.5vw,84px)) saturate(125%);}
 .desk__lights i{position:absolute;width:44%;aspect-ratio:1;border-radius:50%;will-change:translate,scale;}
 .desk__lights i:nth-child(1){left:-6%;top:44%;background:color-mix(in oklab,#8fe8c0 78%,var(--bg));animation:lavaA 26s ease-in-out infinite alternate;}
@@ -946,7 +1498,7 @@ const STAGE_CSS = `
 @keyframes lavaC{0%{translate:0 0;scale:1;}34%{translate:-70% -58%;scale:1.16;}66%{translate:-118% 14%;scale:.9;}100%{translate:-34% -30%;scale:1.12;}}
 /* things on the desktop: a column down the right edge, the way a Mac stacks them */
 .stage .desk__files{
-  position:absolute;z-index:1;top:clamp(14px,2.2vw,30px);right:clamp(14px,2.2vw,30px);
+  position:absolute;z-index:1;top:calc(var(--mb) + clamp(14px,2.2vw,30px));right:clamp(14px,2.2vw,30px);
   list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:clamp(8px,1.2vw,16px);
 }
 .desk__files button{
@@ -961,6 +1513,137 @@ const STAGE_CSS = `
 .desk__files button:is(:hover,:focus-visible){background:color-mix(in srgb,var(--text) 8%,transparent);}
 .desk__files button:is(:hover,:focus-visible) b{background:#1f86ea;color:#fff;}
 .desk__files button:active .fi__art{scale:.93;}
+
+/* the sections, as apps in the middle of the desktop */
+.stage .desk__apps{position:relative;z-index:1;list-style:none;margin:auto 0;padding:0;display:flex;flex-wrap:wrap;justify-content:center;gap:clamp(4px,1vw,16px);}
+.desk__apps button{
+  display:flex;flex-direction:column;align-items:center;gap:8px;width:calc(var(--ic) * 2.1);padding:10px 4px 7px;border:none;border-radius:14px;
+  background:none;cursor:pointer;transition:background .2s var(--ease);
+}
+.da__tile{
+  display:grid;place-items:center;width:calc(var(--ic) * 1.25);aspect-ratio:1;border-radius:23%;background:var(--bg);
+  box-shadow:0 0 0 .5px color-mix(in srgb,var(--text) 14%,transparent),0 12px 22px -12px color-mix(in srgb,var(--shadow) 60%,transparent);
+  transition:scale .25s var(--ease);
+}
+.da__tile svg{width:44%;height:auto;}
+.desk__apps b{font-weight:500;font-size:clamp(11.5px,1vw,13.5px);line-height:1.35;white-space:nowrap;}
+.desk__apps button:is(:hover,:focus-visible){background:color-mix(in srgb,var(--text) 7%,transparent);}
+.desk__apps button:is(:hover,:focus-visible) .da__tile{scale:1.06;}
+.desk__apps button:active .da__tile{scale:.94;}
+
+/* widgets in the top left corner: the clock and the calendar, sized together from --wg */
+.desk__widgets{--wg:clamp(100px,10vw,150px);position:relative;z-index:1;align-self:flex-start;display:flex;align-items:flex-start;gap:calc(var(--wg) * .12);}
+.wg{flex:none;width:var(--wg);height:var(--wg);min-height:0;overflow:hidden;}
+.wg--clock{
+  position:relative;padding:calc(var(--wg) * .05);border-radius:23%;
+  background:var(--glass);backdrop-filter:blur(10px) saturate(190%) brightness(1.05);-webkit-backdrop-filter:blur(10px) saturate(190%) brightness(1.05);
+  box-shadow:inset 0 1.5px 0 var(--rim),inset 0 -1px 0 var(--rim-soft),inset 0 0 0 1px var(--rim-soft),inset 0 -10px 24px -14px rgba(255,255,255,.55),
+    0 0 0 .5px var(--glass-edge),0 18px 36px -22px color-mix(in srgb,var(--shadow) 55%,transparent);
+}
+/* the light on the glass: a soft sheen across the top */
+.wg--clock::before{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(160deg,rgba(255,255,255,.5),rgba(255,255,255,0) 46%);opacity:.7;
+}
+.wg--clock svg{position:relative;display:block;width:100%;height:100%;overflow:visible;}
+.wg__tick{stroke:color-mix(in srgb,var(--text) 30%,transparent);stroke-width:.6;stroke-linecap:round;}
+.wg__tick--hour{stroke:var(--text);stroke-width:1.2;}
+.wg__num{font-family:var(--font-body);font-size:9px;font-weight:500;fill:var(--text);}
+.wg__hand{stroke:var(--text);stroke-linecap:round;}
+.wg__hand-dot{fill:var(--text);stroke:var(--bg);stroke-width:.8;}
+.wg__second{stroke:#ff9500;stroke-width:.9;stroke-linecap:round;}
+.wg__second-dot{fill:#ff9500;}
+/* the calendar: a nearly solid card exactly the size of the clock, the month over a grid of its days */
+.wg--cal{
+  display:flex;flex-direction:column;padding:calc(var(--wg) * .085) calc(var(--wg) * .08) calc(var(--wg) * .06);border-radius:23%;
+  font-size:calc(var(--wg) * .068);line-height:1;
+  background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(14px) saturate(170%);-webkit-backdrop-filter:blur(14px) saturate(170%);
+  box-shadow:inset 0 1px 0 var(--rim-soft),0 0 0 .5px var(--glass-edge),0 18px 36px -22px color-mix(in srgb,var(--shadow) 55%,transparent);
+}
+.wg--cal p{flex:none;margin:0 0 .55em .35em;font-size:1.08em;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#ff3b30;}
+.stage .wg--cal ol{flex:1;min-height:0;list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-auto-rows:minmax(0,1fr);place-items:center;font-weight:500;font-variant-numeric:tabular-nums;}
+.wg--cal li{display:grid;place-items:center;width:1.55em;height:1.55em;border-radius:50%;}
+.wg__dow{font-size:.86em;font-weight:600;color:var(--muted);}
+.wg--cal .is-today{background:#ff3b30;color:#fff;font-weight:700;}
+
+/* the iPod: white body, a small screen, a click wheel. It keeps its own colours in every theme, like a real one.
+   It pops up in the middle of the screen from the dock's Music app, floats over everything, and drags anywhere. */
+.ipw{
+  --wg:clamp(170px,calc(var(--sw) * .21),280px);
+  position:absolute;z-index:6;inset:0 0 calc(var(--ic) * 1.4) 0;margin:auto;width:calc(var(--wg) * .78);height:fit-content;
+  animation:ipwIn .35s cubic-bezier(.2,.85,.2,1) both;
+}
+@keyframes ipwIn{from{opacity:0;scale:.8;}}
+.ipw .ipod{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;}
+.ipw.is-dragging .ipod{cursor:grabbing;}
+.ipw.is-dragging{filter:drop-shadow(0 18px 22px rgba(0,0,0,.18));}
+/* the close button sits on the iPod's corner, the way it does on a widget being edited */
+.ipw__close{
+  position:absolute;z-index:1;top:-8px;left:-8px;width:22px;height:22px;padding:0;border:none;border-radius:50%;cursor:pointer;
+  background:rgba(60,60,60,.82);box-shadow:0 0 0 1px rgba(255,255,255,.6);opacity:0;scale:.7;transition:opacity .2s var(--ease),scale .2s var(--ease);
+}
+.ipw__close::before,.ipw__close::after{content:"";position:absolute;left:6px;top:10.25px;width:10px;height:1.5px;border-radius:1px;background:#fff;rotate:45deg;}
+.ipw__close::after{rotate:-45deg;}
+.ipw:is(:hover,:focus-within) .ipw__close{opacity:1;scale:1;}
+@media (hover:none){.ipw__close{opacity:1;scale:1;}}
+.ipod{
+  display:flex;flex-direction:column;align-items:center;gap:calc(var(--wg) * .065);padding:calc(var(--wg) * .065);
+  border-radius:calc(var(--wg) * .13);font-family:var(--font-body);font-size:calc(var(--wg) * .068);line-height:1.25;color:#111;
+  background:linear-gradient(160deg,#fdfdfc,#e2e2df);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.85),0 0 0 1px rgba(0,0,0,.09),0 18px 36px -22px color-mix(in srgb,var(--shadow) 65%,transparent);
+}
+.ipod__screen{display:flex;flex-direction:column;width:100%;aspect-ratio:1.2;overflow:hidden;border-radius:calc(var(--wg) * .025);background:#fff;box-shadow:inset 0 0 0 1px rgba(0,0,0,.2);}
+.ipod__head{margin:0;flex:none;display:flex;justify-content:space-between;align-items:center;padding:.22em .5em;font-size:.8em;font-weight:600;background:linear-gradient(#fbfbfb,#d8dce2);border-bottom:1px solid rgba(0,0,0,.12);}
+.ipod__eq{display:inline-flex;align-items:flex-end;gap:1px;height:.85em;}
+.ipod__eq i{width:2px;height:30%;border-radius:1px;background:#2f76e0;}
+.ipod__eq.is-playing i{animation:ipodEq .8s ease-in-out infinite alternate;}
+.ipod__eq.is-playing i:nth-child(2){animation-delay:-.3s;}
+.ipod__eq.is-playing i:nth-child(3){animation-delay:-.55s;}
+@keyframes ipodEq{from{height:25%;}to{height:100%;}}
+.ipod__now{display:flex;align-items:center;gap:.5em;min-width:0;padding:.55em .5em .2em;}
+.ipod__now img{flex:none;width:2.8em;height:2.8em;border-radius:.2em;object-fit:cover;}
+.ipod__now div{display:flex;flex-direction:column;min-width:0;}
+.ipod__title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#111;}
+.ipod__artist{font-size:.86em;color:#6b6b68;}
+.ipod__title:hover,.ipod__artist:hover{text-decoration:underline;}
+.ipod__time{margin-top:auto;display:grid;grid-template-columns:1fr 1fr;gap:.25em 0;padding:0 .5em .35em;font-size:.7em;color:#555;font-variant-numeric:tabular-nums;}
+.ipod__time span:last-child{text-align:right;}
+.ipod__bar{grid-column:1/-1;height:.5em;border-radius:1em;background:linear-gradient(to right,#3b86ec var(--p),#e6e8eb var(--p));box-shadow:inset 0 0 0 1px rgba(0,0,0,.1);}
+.ipod__status{margin:auto .5em .35em;font-size:.72em;color:#666;}
+.ipod__status a{text-decoration:underline;}
+/* the volume: a speaker that mutes, and a bar to drag. Turning the click wheel moves the same bar. */
+.ipod__vol{flex:none;display:flex;align-items:center;gap:.45em;padding:0 .5em .5em;font-size:.8em;color:#666;}
+.ipod__vol button{flex:none;display:grid;place-items:center;width:1.25em;height:1.25em;padding:0;border:none;background:none;cursor:pointer;color:inherit;}
+.ipod__vol button:is(:hover,:focus-visible){color:#111;outline:none;}
+.ipod__vol svg{width:1.25em;height:1.25em;}
+.ipod__vol input{
+  flex:1;min-width:0;height:.5em;margin:0;appearance:none;-webkit-appearance:none;border-radius:1em;cursor:pointer;outline:none;
+  background:linear-gradient(to right,#8d929b var(--p),#e6e8eb var(--p));box-shadow:inset 0 0 0 1px rgba(0,0,0,.1);
+}
+.ipod__vol input::-webkit-slider-thumb{-webkit-appearance:none;width:.95em;height:.95em;border-radius:50%;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.25),0 1px 2px rgba(0,0,0,.25);}
+.ipod__vol input::-moz-range-thumb{width:.95em;height:.95em;border:none;border-radius:50%;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.25),0 1px 2px rgba(0,0,0,.25);}
+.ipod__vol input:focus-visible{box-shadow:inset 0 0 0 1px rgba(0,0,0,.1),0 0 0 2px #2f76e0;}
+.stage .ipod__list{flex:1;list-style:none;margin:0;padding:0;overflow-y:auto;scrollbar-width:none;}
+.ipod__list button{
+  display:block;width:100%;padding:.24em .5em;border:none;background:none;cursor:pointer;text-align:left;
+  font-size:.84em;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.ipod__list button:is(:hover,:focus-visible,[aria-current]){background:linear-gradient(#5ea3f6,#2f76e0);color:#fff;outline:none;}
+.ipod__wheel{position:relative;width:80%;aspect-ratio:1;border-radius:50%;background:linear-gradient(#f2f2f0,#dededb);box-shadow:inset 0 1px 2px rgba(0,0,0,.12),0 0 0 1px rgba(0,0,0,.06);}
+.ipod__wheel button{position:absolute;display:grid;place-items:center;padding:0;border:none;background:none;cursor:pointer;color:#9a9a96;transition:color .15s;}
+.ipod__wheel button:is(:hover,:focus-visible){color:#2a2a2a;outline:none;}
+.ipod__wheel svg{width:1em;height:1em;}
+.stage .ipod__menu{top:2%;left:28%;width:44%;height:26%;font-size:.62em;font-weight:700;letter-spacing:.08em;text-transform:uppercase;}
+.ipod__menu[aria-pressed="true"]{color:#2a2a2a;}
+.ipod__prev{left:2%;top:28%;width:26%;height:44%;}
+.ipod__next{right:2%;top:28%;width:26%;height:44%;}
+.ipod__pp{bottom:2%;left:28%;width:44%;height:26%;}
+.ipod__wheel .ipod__center{
+  left:32%;top:32%;width:36%;height:36%;border-radius:50%;background:linear-gradient(#fefefd,#eaeae7);
+  box-shadow:0 0 0 1px rgba(0,0,0,.09),0 1px 2px rgba(0,0,0,.12);
+}
+.ipod__wheel .ipod__center:active{background:#e2e2df;}
+.ipod__wheel .ipod__center:focus-visible{box-shadow:0 0 0 2px #2f76e0;}
 
 /* boat */
 .fo{display:flex;flex-direction:column;}
@@ -983,51 +1666,205 @@ const STAGE_CSS = `
 .tx__foot button{padding:6px 14px;border:none;border-radius:999px;background:var(--surface);font-size:13px;cursor:pointer;transition:background .2s var(--ease),color .2s var(--ease);}
 .tx__foot button:hover{background:var(--text);color:var(--bg);}
 
-.dk{position:relative;z-index:1;margin-top:auto;display:flex;flex-direction:column;align-items:center;}
+/* ---- the dock: a bar of liquid glass, the icons with no names under them; a name shows above an icon while it's
+   pointed at, a dot under an app that's open, and a line between Mac's own groups ---- */
+.dk{position:relative;z-index:2;margin-top:auto;display:flex;flex-direction:column;align-items:center;}
 .stage .dk__dock{
-  list-style:none;margin:0;padding:clamp(10px,1.1vw,14px);display:flex;gap:clamp(8px,1.2vw,16px);border-radius:clamp(22px,2.4vw,30px);
-  background:color-mix(in srgb,var(--bg) 55%,transparent);backdrop-filter:blur(18px) saturate(160%);-webkit-backdrop-filter:blur(18px) saturate(160%);
-  box-shadow:0 0 0 1px color-mix(in srgb,var(--bg) 70%,transparent),0 18px 40px -24px color-mix(in srgb,var(--shadow) 55%,transparent);
+  position:relative;list-style:none;margin:0;display:flex;align-items:center;
+  padding:calc(var(--ic) * .17);gap:calc(var(--ic) * .14);border-radius:calc(var(--ic) * .48);
+  background:var(--glass);
+  backdrop-filter:blur(8px) saturate(200%) brightness(1.06);-webkit-backdrop-filter:blur(8px) saturate(200%) brightness(1.06);
+  box-shadow:
+    inset 0 1.5px 0 var(--rim),inset 0 -1px 0 var(--rim-soft),inset 1px 0 0 var(--rim-soft),inset -1px 0 0 var(--rim-soft),
+    inset 0 -14px 28px -18px rgba(255,255,255,.5),
+    0 0 0 .5px var(--glass-edge),0 14px 34px -14px color-mix(in srgb,var(--shadow) 40%,transparent);
 }
-.dk__dock button{
-  display:flex;flex-direction:column;align-items:center;gap:8px;width:clamp(68px,7.6vw,104px);padding:0;border:none;background:none;cursor:pointer;
-  transition:translate .3s var(--ease);
+/* the sheen: light caught across the top of the glass */
+.stage .dk__dock::before{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(180deg,rgba(255,255,255,.32),rgba(255,255,255,0) 52%);opacity:.8;
 }
+.dk__dock li{position:relative;display:flex;}
+.dk__dock :is(button,a){position:relative;display:flex;flex-direction:column;align-items:center;padding:0;border:none;background:none;cursor:pointer;color:inherit;text-decoration:none;transition:translate .3s var(--ease);}
 .dk__tile{
-  display:grid;place-items:center;width:clamp(50px,5.4vw,72px);aspect-ratio:1;border-radius:26%;background:var(--bg);
-  box-shadow:0 1px 0 color-mix(in srgb,var(--text) 10%,transparent),0 10px 20px -12px color-mix(in srgb,var(--shadow) 55%,transparent);
+  display:grid;place-items:center;width:var(--ic);aspect-ratio:1;border-radius:23%;background:var(--bg);
+  box-shadow:0 0 0 .5px color-mix(in srgb,var(--text) 14%,transparent),0 6px 12px -8px color-mix(in srgb,var(--shadow) 60%,transparent);
   transition:scale .3s var(--ease);
 }
-.dk__dock b{font-weight:500;font-size:clamp(11.5px,1vw,13.5px);white-space:nowrap;}
+/* drawn tiles sit a little inside their slot, matching the margin real Mac icons have around them */
+span.dk__tile{width:calc(var(--ic) * .82);margin:calc(var(--ic) * .09);}
+.dk__tile svg{width:46%;height:auto;}
+.dk__tile svg[viewBox="0 0 64 64"]{width:82%;}
+/* pictures of real Mac icons carry their own shape and shadow */
+img.dk__tile{display:block;height:auto;border-radius:0;background:none;box-shadow:none;}
+span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);background:none;box-shadow:none;}
+.dk__tile--folder .fi__art{width:100%;filter:drop-shadow(0 4px 5px color-mix(in srgb,var(--shadow) 22%,transparent));}
+.dk__sep{align-self:stretch;width:1px;margin:calc(var(--ic) * .06) calc(var(--ic) * .04);background:color-mix(in srgb,var(--text) 22%,transparent);}
+/* the name: a small glass label above the icon */
+.dk__dock b{
+  position:absolute;bottom:calc(100% + var(--ic) * .3);left:50%;translate:-50% 4px;padding:4px 10px;border-radius:8px;
+  font-weight:500;font-size:12.5px;line-height:1.3;white-space:nowrap;pointer-events:none;opacity:0;
+  background:color-mix(in srgb,var(--bg) 78%,transparent);backdrop-filter:blur(12px) saturate(180%);-webkit-backdrop-filter:blur(12px) saturate(180%);
+  box-shadow:inset 0 1px 0 var(--rim-soft),0 0 0 .5px var(--glass-edge),0 6px 16px -8px color-mix(in srgb,var(--shadow) 50%,transparent);
+  transition:opacity .15s var(--ease),translate .2s var(--ease);
+}
+.dk__dock :is(button,a):is(:hover,:focus-visible):not([aria-expanded="true"]) b{opacity:1;translate:-50% 0;}
+.dk__dock .is-running::after{
+  content:"";position:absolute;left:50%;bottom:calc(var(--ic) * -.13);width:4px;height:4px;margin-left:-2px;border-radius:50%;
+  background:color-mix(in srgb,var(--text) 75%,transparent);
+}
 .dk__nudge{
   margin:0 0 14px;text-align:center;font-size:13.5px;font-weight:500;color:color-mix(in srgb,var(--text) 70%,transparent);
   animation:nudge 9s var(--ease) 1.6s both;
 }
 @keyframes nudge{0%{opacity:0;translate:0 6px;}8%,78%{opacity:1;translate:0 0;}100%{opacity:0;translate:0 0;}}
-.dk__dock button:is(:hover,:focus-visible){translate:0 -8px;}
-.dk__dock button:active .dk__tile{scale:.92;}
+.dk__dock :is(button,a):is(:hover,:focus-visible){translate:0 calc(var(--ic) * -.14);}
+.dk__dock :is(button,a):active .dk__tile{scale:.92;}
 
-/* ---- an open app: it grows out of its dock icon to fill the screen, and shrinks back into it ---- */
-.app{
-  position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;background:var(--bg);overflow:hidden;
-  transform-origin:var(--ox,50%) var(--oy,100%);animation:appIn .5s cubic-bezier(.2,.85,.2,1) both;
+/* ---- a dock folder, open: a grid of its apps on glass, above its icon, pointing down at it ---- */
+.stk{
+  position:absolute;bottom:calc(100% + var(--ic) * .28);left:0;width:max-content;max-width:calc(var(--sw) - 40px);
+  padding:14px 14px 12px;border-radius:18px;transform-origin:var(--tip,50%) 100%;
+  background:color-mix(in srgb,var(--bg) 62%,transparent);
+  backdrop-filter:blur(22px) saturate(190%);-webkit-backdrop-filter:blur(22px) saturate(190%);
+  box-shadow:inset 0 1px 0 var(--rim),inset 0 0 0 1px var(--rim-soft),0 0 0 .5px var(--glass-edge),0 24px 50px -20px color-mix(in srgb,var(--shadow) 55%,transparent);
+  animation:stkIn .28s cubic-bezier(.2,.85,.2,1) both;
 }
+.stk::after{
+  content:"";position:absolute;top:100%;left:var(--tip,50%);width:16px;height:9px;margin-left:-8px;
+  clip-path:polygon(0 0,100% 0,50% 100%);background:color-mix(in srgb,var(--bg) 62%,transparent);
+}
+@keyframes stkIn{from{opacity:0;scale:.85;}}
+.stk__title{margin:0 4px 10px;font-size:13px;font-weight:600;}
+.stage .stk__grid{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(min(5,var(--n,5)),auto);gap:6px 4px;}
+.stk__grid a{
+  display:flex;flex-direction:column;align-items:center;gap:6px;width:clamp(76px,7vw,92px);padding:8px 4px 6px;border-radius:10px;
+  color:var(--text);text-decoration:none;transition:background .2s var(--ease);
+}
+.stk__grid img{display:block;width:clamp(44px,4.4vw,56px);height:auto;aspect-ratio:1;border-radius:23%;transition:scale .25s var(--ease);}
+.stk__grid img[src$=".png"]{border-radius:0;}
+.stk__grid b{font-weight:500;font-size:12px;line-height:1.3;white-space:nowrap;}
+.stk__grid a:is(:hover,:focus-visible){background:color-mix(in srgb,var(--text) 9%,transparent);}
+.stk__grid a:active img{scale:.93;}
+.stk__empty{margin:6px 4px 4px;min-width:170px;font-size:13px;color:var(--muted);}
+
+/* ---- an open app: a window that grows out of its icon and shrinks back into it. It sits in the middle of the
+   screen, under the dock, which stays in sight and in use. --win-t and --win-l are its gaps from the screen's
+   top and sides, in lengths (not percentages), because the zoom's starting point is worked out from them. ---- */
+/* the layer the windows live on: above the desktop's icons, below the dock. Each window's own z-index (set as
+   it is opened or clicked) only orders it among the other windows. */
+.wins{position:absolute;inset:0;z-index:1;pointer-events:none;}
+.app{
+  --win-t:calc(var(--mb) + clamp(8px,1.5vw,20px));--win-l:clamp(28px,9vw,170px);--win-r:12px;
+  position:absolute;inset:var(--win-t) var(--win-l) calc(var(--desk-pad) + var(--ic) * 1.34 + 56px);pointer-events:auto;
+  display:flex;flex-direction:column;background:var(--bg);overflow:hidden;
+  box-shadow:0 0 0 .5px color-mix(in srgb,var(--text) 22%,transparent),0 20px 44px -22px color-mix(in srgb,var(--shadow) 45%,transparent);
+  /* --dx and --dy are how far it has been dragged (or stepped aside as it opened) */
+  translate:var(--dx,0px) var(--dy,0px);
+  transform-origin:calc(var(--ox,50%) - var(--win-l) - var(--dx,0px)) calc(var(--oy,100%) - var(--win-t) - var(--dy,0px));
+  animation:appIn .5s cubic-bezier(.2,.85,.2,1) both;transition:inset .28s var(--ease);outline:none;
+}
+/* the window in front casts the deeper shadow; the ones behind it grey their lights, like a Mac's */
+.app[data-front]{box-shadow:0 0 0 .5px color-mix(in srgb,var(--text) 26%,transparent),0 34px 70px -22px color-mix(in srgb,var(--shadow) 65%,transparent);}
+.app:not([data-front]) :is(.app__close,.app__min,.app__max){background:rgba(140,140,140,.5);}
+/* the five sections hold more, so their window is wider and taller */
+.app[data-wide]{--win-t:calc(var(--mb) + clamp(6px,.8vw,12px));--win-l:clamp(14px,3.2vw,60px);}
+/* green: the window takes the whole screen between the menu bar and the dock */
+.stage .app[data-max]{--win-t:var(--mb);--win-l:0px;--win-r:0px;inset:var(--mb) 0 calc(var(--desk-pad) + var(--ic) * 1.34 + 10px);}
 .app[data-phase="out"]{animation:appOut .3s cubic-bezier(.55,0,.85,.35) both;}
-@keyframes appIn{from{opacity:0;transform:scale(.06);border-radius:26%;}40%{opacity:1;}to{opacity:1;transform:none;border-radius:0;}}
-@keyframes appOut{from{opacity:1;transform:none;}to{opacity:0;transform:scale(.06);border-radius:26%;}}
-.app__bar{position:relative;flex:none;display:flex;align-items:center;justify-content:center;height:44px;}
-.app__bar p{margin:0;font-size:13px;font-weight:500;color:var(--muted);}
+@keyframes appIn{from{opacity:0;transform:scale(.06);border-radius:26%;}40%{opacity:1;}to{opacity:1;transform:none;border-radius:var(--win-r,0);}}
+@keyframes appOut{from{opacity:1;transform:none;border-radius:var(--win-r,0);}to{opacity:0;transform:scale(.06);border-radius:26%;}}
+/* the yellow and green lights, and the sign each light shows while the pointer is on the bar */
+.app__min,.app__max{position:absolute;top:50%;width:12px;height:12px;margin-top:-6px;padding:0;border:none;border-radius:50%;cursor:pointer;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.18);transition:scale .2s var(--ease);}
+.app__min{left:34px;background:#febc2e;}
+.app__max{left:54px;background:#28c840;}
+:is(.app__min,.app__max):is(:hover,:focus-visible){scale:1.2;}
+:is(.app__close,.app__min,.app__max)::after{position:absolute;inset:0;display:grid;place-items:center;font:700 10px/1 var(--font-body);color:rgba(0,0,0,.6);opacity:0;transition:opacity .15s;}
+.app__close::after{content:"×";}
+.app__min::after{content:"−";}
+.app__max::after{content:"+";}
+.app[data-front] .app__bar:hover :is(.app__close,.app__min,.app__max)::after{opacity:1;}
+/* the dock's small apps fill their window edge to edge; a few keep their own colours in every theme */
+.app .app__body--flush{padding:0;overflow:hidden;}
+.app .app__body--flush > *{height:100%;min-height:0;}
+.app:is([data-id="ghostty"],[data-id="welcome"]){--win-l:clamp(28px,calc(var(--sw) * .2),260px);--win-t:calc(var(--mb) + clamp(14px,calc(var(--sw) * .06),80px));}
+.app[data-id="ghostty"] .app__bar{background:#1d1e26;border-color:#0e0f13;}
+.app[data-id="vscodium"] .app__bar{background:#181818;border-color:#2b2b2b;}
+.app[data-id="obsidian"] .app__bar{background:#262626;border-color:#363636;}
+.app[data-id="slack"] .app__bar{background:#350d36;border-color:#350d36;}
+.app:is([data-id="ghostty"],[data-id="vscodium"],[data-id="obsidian"],[data-id="slack"]) .app__bar p{color:#d6d6d6;}
+.app[data-id="claude"],.app[data-id="claude"] .app__bar{background:color-mix(in srgb,#d97757 5%,var(--bg));}
+.app[data-id="claude"] .app__bar{border-bottom:none;}
+
+/* ---- the menu bar: a strip of glass across the top of the screen. The boat, the app in front, menus that
+   really work, and the time. Its menus drop down as small sheets of the same glass. ---- */
+.mb{
+  position:absolute;z-index:3;top:0;left:0;right:0;height:var(--mb);display:flex;align-items:stretch;padding:0 8px;
+  font-size:clamp(11.5px,calc(var(--mb) * .5),13px);line-height:1;cursor:default;user-select:none;-webkit-user-select:none;
+  background:color-mix(in srgb,var(--bg) 40%,transparent);backdrop-filter:blur(16px) saturate(180%);-webkit-backdrop-filter:blur(16px) saturate(180%);
+  box-shadow:inset 0 -.5px 0 var(--glass-edge);
+}
+.mb > span,.mb__menu{position:relative;display:flex;}
+.mb__logo,.mb__menu > button{display:flex;align-items:center;padding:0 9px;border:none;border-radius:5px;background:none;cursor:default;}
+.mb__logo svg{width:1.25em;height:1.25em;fill:currentColor;}
+.mb__app{display:flex;align-items:center;padding:0 9px 0 3px;font-weight:700;white-space:nowrap;}
+:is(.mb__logo,.mb__menu > button):is(:hover,:focus-visible,[aria-expanded="true"]){background:color-mix(in srgb,var(--text) 13%,transparent);outline:none;}
+.mb__time{margin-left:auto;display:flex;align-items:center;padding:0 6px;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.stage .mb ul{
+  position:absolute;top:calc(100% + 5px);left:0;min-width:190px;list-style:none;margin:0;padding:5px;border-radius:10px;
+  background:color-mix(in srgb,var(--bg) 76%,transparent);backdrop-filter:blur(24px) saturate(190%);-webkit-backdrop-filter:blur(24px) saturate(190%);
+  box-shadow:inset 0 1px 0 var(--rim-soft),0 0 0 .5px var(--glass-edge),0 18px 40px -16px color-mix(in srgb,var(--shadow) 60%,transparent);
+}
+.mb li button{display:flex;align-items:center;gap:7px;width:100%;padding:5px 12px 5px 6px;border:none;border-radius:6px;background:none;cursor:default;text-align:left;white-space:nowrap;font-size:13px;}
+.mb li button:is(:hover,:focus-visible):not(:disabled){background:#1f86ea;color:#fff;outline:none;}
+.mb li button:disabled{opacity:.4;}
+.mb li i{flex:none;width:12px;font-style:normal;font-size:11px;}
+.mb kbd{margin-left:auto;padding-left:22px;font:inherit;opacity:.55;}
+
+/* Welcome */
+.wl{display:flex;flex-direction:column;justify-content:center;max-width:640px;margin:0 auto;}
+.wl .app__title{margin-top:10px;}
+.wl__go{margin:24px 0 0;display:flex;flex-wrap:wrap;gap:10px;}
+.wl__go button{padding:11px 20px;border:1px solid var(--text);border-radius:999px;background:var(--text);color:var(--bg);font-size:15px;font-weight:500;cursor:pointer;transition:scale .2s var(--ease);}
+.wl__go button + button{background:none;color:var(--text);}
+.wl__go button:hover{scale:1.03;}
+.wl__go button:active{scale:.97;}
+.wl__tip{margin:22px 0 0;font-size:13.5px;line-height:1.5;color:var(--muted);}
+
+/* a note popped up by a dock app: a small sheet of glass in the middle of the screen */
+.al{
+  position:absolute;z-index:7;inset:0 0 calc(var(--ic) * 1.4) 0;margin:auto;width:220px;height:fit-content;
+  display:flex;flex-direction:column;align-items:center;padding:20px 16px 16px;border-radius:18px;text-align:center;
+  background:color-mix(in srgb,var(--bg) 70%,transparent);backdrop-filter:blur(22px) saturate(190%);-webkit-backdrop-filter:blur(22px) saturate(190%);
+  box-shadow:inset 0 1px 0 var(--rim),inset 0 0 0 1px var(--rim-soft),0 0 0 .5px var(--glass-edge),0 30px 60px -22px color-mix(in srgb,var(--shadow) 65%,transparent);
+  animation:ipwIn .3s cubic-bezier(.2,.85,.2,1) both;
+}
+.al img{display:block;}
+.al p{margin:8px 0 0;font-size:17px;font-weight:700;}
+.al span{font-size:12px;color:var(--muted);}
+.al button{align-self:stretch;margin-top:14px;padding:7px 0;border:none;border-radius:9px;background:#1f86ea;color:#fff;font-size:13.5px;font-weight:500;cursor:pointer;}
+.al button:hover{background:#1976d2;}
+
+/* a window's bar: three lights (the red one closes it) and the app's name, on a strip of its own */
+.app__bar{
+  position:relative;flex:none;display:flex;align-items:center;justify-content:center;height:38px;cursor:default;
+  user-select:none;-webkit-user-select:none;touch-action:none;
+  background:color-mix(in srgb,var(--surface) 70%,var(--bg));border-bottom:1px solid var(--line);
+}
+.app__bar p{margin:0;font-size:13px;font-weight:600;}
 .app__close{
-  position:absolute;left:16px;top:50%;width:13px;height:13px;margin-top:-6.5px;padding:0;border:none;border-radius:50%;cursor:pointer;
-  background:color-mix(in srgb,var(--text) 26%,transparent);transition:background .2s var(--ease),scale .2s var(--ease);
+  position:absolute;left:14px;top:50%;width:12px;height:12px;margin-top:-6px;padding:0;border:none;border-radius:50%;cursor:pointer;
+  background:#ff5f57;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.18);transition:scale .2s var(--ease);
 }
 .app__close::before{content:"";position:absolute;inset:-12px;}
-.app__close:is(:hover,:focus-visible){background:var(--text);scale:1.25;}
+.app__close:is(:hover,:focus-visible){scale:1.2;}
 .app__body{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;padding:clamp(10px,1.6vw,22px) clamp(22px,4vw,60px) clamp(22px,3.4vw,48px);}
 .app__body > *{min-height:100%;}
 .app__meta{margin:0;font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);}
 .app__title{margin:10px 0 0;font-family:var(--font-display);font-size:clamp(30px,3.3vw,48px);font-weight:400;letter-spacing:-.015em;line-height:1;}
 .app__title--xl{margin:0;font-size:clamp(38px,5.4vw,82px);line-height:.98;max-width:11em;}
+/* a label beside a value (About's facts, Contact's links): plain type, like Experience's dates */
+.app__label{margin:0;font-size:14px;font-weight:500;line-height:1.35;color:var(--muted);}
 .app__lead{margin:16px 0 0;font-size:clamp(16px,1.4vw,20px);line-height:1.4;color:var(--muted);}
 .app__lead strong{color:var(--text);font-weight:500;}
 .app__bullets{margin-top:18px;}
@@ -1103,49 +1940,14 @@ const STAGE_CSS = `
 .tl .app__bullets li{font-size:14px;line-height:1.5;}
 .tl .project__stack{margin-top:10px;}
 
-/* Music: the player from the record, given the whole screen */
-.mu{display:flex;height:100%;}
-.stage .mu .dock__panel{
-  position:static;flex:1;width:auto;padding:0;border:none;border-radius:0;background:none;box-shadow:none;
-  opacity:1;visibility:visible;transform:none;transition:none;
-  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-auto-rows:min-content;align-content:center;
-  column-gap:clamp(28px,5vw,80px);row-gap:clamp(12px,1.4vw,18px);
-}
-.mu .dock__panel > *{grid-column:1;}
-.mu .dock__now{gap:clamp(14px,1.8vw,24px);}
-.mu .dock__art{width:clamp(96px,11vw,150px);height:auto;aspect-ratio:1;border-radius:18px;}
-.mu .dock__title{font-family:var(--font-display);font-size:clamp(28px,3.2vw,46px);line-height:1;letter-spacing:-.015em;white-space:normal;}
-.mu .dock__artist{font-size:15px;}
-.stage .mu .dock__list{grid-column:2;grid-row:1/span 8;align-self:center;max-height:min(100%,56svh);overflow-y:auto;scrollbar-width:thin;margin:0;}
-.mu .dock__list button{font-family:var(--font-display);font-size:clamp(19px,1.9vw,27px);letter-spacing:-.015em;padding:5px 0;}
-
-/* Résumé */
-.rs{position:relative;display:flex;}
-.rs iframe{flex:1;width:100%;min-height:320px;border:none;border-radius:12px;background:var(--surface);}
+/* Résumé: the page as a picture, as wide as the column allows, scrolling with the window */
+.rs{display:flex;flex-direction:column;align-items:center;}
+.rs__pages{display:flex;flex-direction:column;gap:16px;width:min(100%,860px);cursor:zoom-in;}
+.rs__pages img{display:block;width:100%;height:auto;border-radius:6px;background:#fff;box-shadow:0 0 0 1px var(--line),0 18px 40px -26px color-mix(in srgb,var(--shadow) 60%,transparent);}
+/* the download stays in the bottom right corner while the page scrolls under it */
 .rs__get{
-  position:absolute;right:16px;bottom:16px;display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;
+  position:sticky;bottom:0;align-self:flex-end;margin-top:-30px;display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;
   background:var(--text);color:var(--bg) !important;font-size:14px;font-weight:500;box-shadow:0 12px 24px -14px color-mix(in srgb,var(--shadow) 80%,transparent);
-}
-
-/* Tech stack */
-.sk{display:flex;flex-direction:column;}
-.sk__groups{flex:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:clamp(20px,2.4vw,34px) clamp(20px,3vw,48px);}
-.sk__group{margin:0;font-family:var(--font-display);font-size:clamp(20px,1.9vw,27px);font-weight:400;letter-spacing:-.015em;line-height:1;}
-.stage .sk__chips{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px;}
-.sk__chips button{
-  display:inline-flex;align-items:center;gap:8px;padding:7px 12px 7px 8px;border-radius:999px;cursor:pointer;
-  border:none;background:var(--surface);font-size:14px;transition:background .2s var(--ease),color .2s var(--ease);
-}
-.sk__chips button:hover{background:color-mix(in srgb,var(--text) 12%,var(--bg));}
-.sk__chips button[aria-pressed="true"]{background:var(--text);color:var(--bg);}
-.sk__chips img{display:block;}
-.sk__chips i{display:grid;place-items:center;width:16px;height:16px;border-radius:50%;font-style:normal;font-family:var(--mono);font-size:10px;border:1px solid currentColor;}
-.sk__used{flex:none;margin-top:auto;padding-top:26px;min-height:88px;}
-.stage .sk__used ul{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:4px 22px;}
-.sk__used :is(button,a){
-  display:inline-flex;align-items:center;gap:6px;padding:0;border:none;background:none;cursor:pointer;
-  font-family:var(--font-display);font-size:clamp(19px,1.9vw,27px);letter-spacing:-.015em;
-  text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px;
 }
 
 /* About */
@@ -1165,7 +1967,7 @@ const STAGE_CSS = `
 .stage[data-intro] .stage__mac{z-index:30;animation:macTravel 1.65s cubic-bezier(.7,0,.2,1) both;}
 .stage[data-intro] .stage__lid{animation:lidOpen 1.65s cubic-bezier(.3,.9,.3,1) both;}
 .stage[data-intro] .desk{animation:screenOn 1.65s linear both;}
-.stage[data-intro] :is(.dk,.desk__files){animation:introIn .5s var(--ease) 1.15s both;}
+.stage[data-intro] :is(.dk,.mb,.desk__files,.desk__widgets,.desk__apps){animation:introIn .5s var(--ease) 1.15s both;}
 .stage[data-intro] .stage__deck{
   display:block;position:absolute;left:-4%;right:-4%;top:100%;height:13px;border-radius:2px 2px 16px 16px;
   background:linear-gradient(#d2d2cf,#b3b3b0);animation:deckOut 1.65s linear both;
@@ -1178,8 +1980,8 @@ const STAGE_CSS = `
 @keyframes deckOut{0%,58%{opacity:1;}90%,100%{opacity:0;}}
 @keyframes introIn{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:none;}}
 
-/* a squeezed window: the desktop column would crowd the dock, so it steps out */
-@media (max-height:560px),(max-width:900px){.stage .desk__files{display:none;}}
+/* a squeezed window: the desktop column and the widgets would crowd the dock, so they step out */
+@media (max-height:560px),(max-width:900px){.stage :is(.desk__files,.desk__widgets){display:none;}}
 /* short windows: tighten the header so the laptop keeps its height */
 @media (max-height:760px){
   .stage__top{padding-top:16px;}
@@ -1224,18 +2026,49 @@ const STAGE_CSS = `
   .desk__lights{position:fixed;z-index:0;}
   .desk__lights i{width:86vw;}
   .stage__top,.stage__base{position:relative;z-index:1;}
-  .desk{padding:26px var(--pad);justify-content:flex-start;}
+  .desk{position:relative;padding:26px var(--pad);justify-content:flex-start;}
   /* the folder and the text file belong to the laptop's desktop; a phone has no room for them */
   .stage .desk__files{display:none;}
-  .dk{margin:0;align-self:stretch;align-items:stretch;}
-  .stage .dk__dock{
-    display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px 6px;padding:0;border-radius:0;
-    background:none;backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;
-  }
-  .dk__dock button{width:100%;}
+  /* one home screen: the sections and the dock's apps flow together as a single grid of four across */
+  .desk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-content:start;align-items:start;gap:24px 6px;}
+  .desk__widgets{grid-column:1/-1;}
+  .stage .desk__apps,.dk,.stage .dk__dock{display:contents;}
+  /* the lights are fixed behind the page here, and would paint over anything that isn't lifted above them */
+  .desk__apps li,.dk__dock li{position:relative;z-index:1;}
+  .desk__apps button{width:100%;padding:0;border-radius:0;}
+  .desk__apps button:is(:hover,:focus-visible){background:none;}
+  .da__tile{width:50px;margin:5px;}
+  .desk__apps b{font-size:12px;}
+  .stage .dk__dock{padding:0;border-radius:0;background:none;backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;}
+  .stage .dk__dock::before,.dk__dock .dk__sep,.dk__dock .is-running::after{display:none;}
+  .dk__dock li{justify-content:center;}
+  .dk__dock :is(button,a){width:100%;gap:8px;}
+  /* pointing at an icon grows it a little; nothing lifts, and the name under it stays put */
+  .dk__dock :is(button,a):is(:hover,:focus-visible){translate:none;}
+  .stage .dk__dock :is(button,a):is(:hover,:focus-visible):not([aria-expanded="true"]) b{translate:none;}
+  .dk__dock :is(button,a):is(:hover,:focus-visible) .dk__tile{scale:1.06;}
+  .dk__dock :is(button,a):active .dk__tile{scale:.94;}
   .dk__tile{width:60px;}
-  .dk__dock b{font-size:12px;}
-  .dk__nudge{order:2;margin:26px 0 0;}
+  span.dk__tile{width:50px;margin:5px;}
+  span.dk__tile--folder{width:54px;margin:3px;}
+  .dk__dock b{position:static;translate:none;opacity:1;padding:0;font-size:12px;background:none;backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;}
+  /* a dock folder opens in the middle of the phone, the way a folder does on a phone's home screen */
+  .stk{position:fixed;z-index:85;left:50% !important;top:50%;bottom:auto;translate:-50% -50%;max-width:calc(100vw - 32px);transform-origin:50% 50%;}
+  .stk::after{display:none;}
+  .stage .stk__grid{grid-template-columns:repeat(3,auto);}
+  /* the iPod floats in the middle of the phone's window, and drags around it */
+  .ipw{position:fixed;z-index:90;inset:0;--wg:min(64vw,280px);}
+  /* on a phone there is no menu bar, and every window fills the screen, the newest on top, and stays where it
+     is, so only the red light is needed */
+  .stage__mac{--mb:0px;}
+  .mb,.app__min,.app__max{display:none;}
+  .wins{z-index:80;}
+  .stage .app,.stage .app[data-max]{inset:0;--win-t:0px;--win-l:0px;--win-r:0;box-shadow:none;translate:none;transform-origin:var(--ox,50%) var(--oy,100%);}
+  .app__bar{touch-action:auto;}
+  .al{position:fixed;z-index:95;inset:0;}
+  .dk__nudge{grid-column:1/-1;order:2;margin:0;}
+  /* a phone's home screen: the two widgets side by side on top, then the sections, then the project apps */
+  .stage .desk__widgets{display:flex;--wg:min(40vw,170px);margin-bottom:4px;}
   .app{position:fixed;z-index:80;}
   .app__bar{height:52px;}
   .app__body{padding:8px var(--pad) 32px;}
@@ -1249,16 +2082,14 @@ const STAGE_CSS = `
   .tl__when span{display:inline;margin-left:8px;}
   .tl__dot{grid-column:1;grid-row:1;margin-top:5px;}
   .tl > li > article{grid-column:2;}
-  .stage .mu .dock__panel{grid-template-columns:minmax(0,1fr);}
-  .stage .mu .dock__list{grid-column:1;grid-row:auto;}
   .ct__links li{grid-template-columns:minmax(0,1fr);gap:2px;}
   .stage__base{order:3;flex-direction:row;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:10px 18px;padding:18px var(--pad) 26px;}
   .stage__archive{display:inline;font-family:var(--font-body);font-size:14px;font-weight:500;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px;}
   .stage__foot{flex-basis:100%;margin:0;}
 }
 @media (prefers-reduced-motion:reduce){
-  .desk__lights i,.app,.pj__shot img,.pj__notes,.stage .dock__tab{animation:none !important;}
-  .pj__shot img,.stage__nav nav :is(button,a),.dk__dock button{transition:none !important;}
+  .desk__lights i,.app,.pj__shot img,.pj__notes,.stage .dock__tab,.ipod__eq i,.ipw,.stk,.al{animation:none !important;}
+  .pj__shot img,.stage__nav nav :is(button,a),.dk__dock :is(button,a){transition:none !important;}
   .pj__shot img{translate:0 0 !important;}
 }
 `;
