@@ -15,8 +15,12 @@ const BOAT_PHOTOS = Object.entries(import.meta.glob("./assets/boat/*.{jpg,jpeg,p
 // comes first, so the first paint doesn't wait on them.
 const loadMini = () => import("./apps");
 const loadObsidian = () => import("./obsidian");
+const loadMordi = () => import("./mordi");
+const loadLately = () => import("./lately");
 const MiniApp = lazy(loadMini);
 const Obsidian = lazy(loadObsidian);
+const Mordi = lazy(loadMordi);
+const Lately = lazy(loadLately);
 
 /* The Showcase site: one screen, no page scroll, and one laptop that never leaves.
    Its screen is a desktop: drifting lights and a dock of five sections. Choosing one opens it
@@ -44,6 +48,7 @@ const APPS = [
   { id: "about", name: "About" },
   { id: "contact", name: "Contact" },
   { id: "resume", name: "Résumé" },
+  { id: "lately", name: "Lately" },
 ];
 // The live projects, each opening in a new tab, and GitHub. They live in the dock's Apps folder.
 const liveOf = (name) => PROJECTS.find((p) => p.name === name).live;
@@ -54,8 +59,8 @@ const LINKS = [
   { id: "lonelychess", name: "Lonely Chess", href: liveOf("Lonely Chess"), icon: "/icons/apps/lonelychess.svg" },
   { id: "github", name: "GitHub", href: GITHUB, icon: "/icons/apps/github.svg" },
 ];
-// The apps on my own Mac's dock. Each does one small thing: "app" opens a little window of its own, "alert" pops
-// up a note, and "href" leaves for a real site.
+// The apps on my own Mac's dock. Each opens a little window of its own that does one small thing. ("href" would
+// make one leave for a real site instead; none does at the moment.)
 const DOCK_EXTRAS = [
   { id: "safari", name: "Safari", app: true },
   { id: "slack", name: "Slack", app: true },
@@ -63,17 +68,17 @@ const DOCK_EXTRAS = [
   { id: "vscodium", name: "VSCodium", app: true },
   { id: "ghostty", name: "Ghostty", app: true },
   { id: "obsidian", name: "Obsidian", app: true },
-  { id: "flstudio", name: "FL Studio", alert: "lol" },
-  { id: "mordi", name: "Mordi", href: liveOf("Mordi") },
-  { id: "tailscale", name: "Tailscale", alert: "lol" },
+  { id: "flstudio", name: "FL Studio", app: true },
+  { id: "mordi", name: "Mordi", app: true },
+  { id: "tailscale", name: "Tailscale", app: true },
 ];
 // The little windows the dock's apps open, Finder's included.
 const MINI = [{ id: "finder", name: "Finder" }, ...DOCK_EXTRAS.filter((x) => x.app)];
-// More favourites for Safari's start page, beside the live projects.
+// More favourites for Safari's start page, beside the live projects. One with no icon gets a coloured letter.
 const SAFARI_MORE = [
-  { name: "LinkedIn", href: "https://www.linkedin.com/in/perfect-phanitchaleun", color: "#0a66c2", event: "social-linkedin" },
+  { name: "LinkedIn", href: "https://www.linkedin.com/in/perfect-phanitchaleun", icon: "/icons/apps/linkedin.svg", event: "social-linkedin" },
   { name: "SoundCloud", href: SC_PROFILE, color: "#ff5500", event: "social-soundcloud" },
-  { name: "Archive", href: "/archive/index.html", color: "#6b6f76", event: "view-archive" },
+  { name: "Archive", href: "/archive/index.html", icon: "/icons/apps/archive.svg", event: "view-archive" },
 ];
 // Folders at the end of the dock. Each opens as a grid above its icon, the way a macOS dock folder does.
 const STACKS = [
@@ -159,7 +164,56 @@ function useStageTheme() {
    from the grid it closes the window. ---- */
 const two = (n) => String(n).padStart(2, "0");
 
-function ProjectsApp({ index, setIndex, layer, setLayer }) {
+// Where one element sits inside another, in the other's own pixels.
+const placeIn = (el, box) => {
+  const a = el.getBoundingClientRect();
+  const b = box.getBoundingClientRect();
+  return { left: a.left - b.left, top: a.top - b.top, width: a.width, height: a.height };
+};
+
+// Moving between the layers, the demo picture flies from where it was to where it's going: out of its card
+// into the middle of the reel, across to the left of the opened project, and back again. The picture that
+// flies is a stand-in drawn over the window; the real one is hidden until the stand-in lands on it.
+function ProjectsApp(props) {
+  const { layer, heroFrom } = props;
+  const wrap = useRef(null);
+  useLayoutEffect(() => {
+    const from = heroFrom.current;
+    heroFrom.current = null;
+    const box = wrap.current;
+    const to = box.querySelector("[data-hero]");
+    if (!from?.image || !to || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    // The picture arrives by flying, so it skips its own entrance, which would also throw off the measuring.
+    to.style.animation = "none";
+    const end = placeIn(to, box);
+    const ghost = document.createElement("div");
+    ghost.className = "pj__ghost";
+    const picture = document.createElement("img");
+    picture.src = from.image;
+    picture.alt = "";
+    ghost.appendChild(picture);
+    box.appendChild(ghost);
+    to.style.visibility = "hidden";
+    const px = (b) => ({ left: `${b.left}px`, top: `${b.top}px`, width: `${b.width}px`, height: `${b.height}px` });
+    const flight = ghost.animate([px(from.box), px(end)], { duration: 440, easing: "cubic-bezier(.2,.85,.2,1)", fill: "both" });
+    const land = () => {
+      ghost.remove();
+      to.style.visibility = "";
+    };
+    flight.onfinish = land;
+    flight.oncancel = land;
+    // Leaving for another layer before it lands: drop it where it is.
+    return () => flight.cancel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layer]);
+  return (
+    <div className="pjw" ref={wrap}>
+      <ProjectsLayer {...props} />
+    </div>
+  );
+}
+
+function ProjectsLayer({ index, setIndex, layer, setLayer }) {
   const count = PROJECTS.length;
   const project = PROJECTS[index];
   const at = (d) => (index + d + count) % count;
@@ -171,15 +225,16 @@ function ProjectsApp({ index, setIndex, layer, setLayer }) {
           <li key={p.name}>
             <button
               type="button"
-              onClick={() => {
+              onClick={(e) => {
                 setIndex(i);
-                setLayer("reel");
+                // the picture flies out of the card that was clicked
+                setLayer("reel", e.currentTarget.querySelector(".pj__thumb"));
               }}
               data-umami-event="project-preview"
               data-umami-event-project={p.name}
             >
-              <span className="pj__thumb">
-                <img src={p.demo.image} alt="" loading="lazy" />
+              <span className="pj__thumb" data-hero={i === index ? "" : undefined}>
+                <img src={p.demo.image} alt="" />
               </span>
               <b>{p.name}</b>
               <i>{p.kind}</i>
@@ -217,7 +272,7 @@ function ProjectsApp({ index, setIndex, layer, setLayer }) {
           <button type="button" className="pj__peek" onClick={() => setIndex(at(-1))} aria-label={`Previous: ${PROJECTS[at(-1)].name}`}>
             <img src={PROJECTS[at(-1)].demo.image} alt="" />
           </button>
-          <button type="button" className="pj__focus" key={project.name} onClick={() => setLayer("detail")} aria-label={`Open ${project.name}`} data-umami-event="project-open" data-umami-event-project={project.name}>
+          <button type="button" className="pj__focus" data-hero="" key={project.name} onClick={() => setLayer("detail")} aria-label={`Open ${project.name}`} data-umami-event="project-open" data-umami-event-project={project.name}>
             <img src={project.demo.image} alt={`${project.name} screenshot`} />
             <span className="pj__tag">{project.demo.domain}</span>
           </button>
@@ -249,7 +304,7 @@ function ProjectsApp({ index, setIndex, layer, setLayer }) {
   return (
     <div className="pj pj--detail">
       {bar}
-      <Shot className="pj__shot" style={{ "--pan": `${Math.max(4, project.demo.height / 240).toFixed(1)}s` }} {...shotLink}>
+      <Shot className="pj__shot" data-hero="" style={{ "--pan": `${Math.max(4, project.demo.height / 240).toFixed(1)}s` }} {...shotLink}>
         <img key={project.name} src={project.demo.image} alt={`${project.name} screenshot`} />
         <span className="pj__tag">
           {project.live ? "Open " : ""}
@@ -802,7 +857,20 @@ function AppWindow({ win, name, wide, flush, front, alone, originOf, screenRef, 
     if (opening) zoom.playbackRate = -2;
     else setPhase("out");
     // The keyboard goes back to the icon it came from when the last window leaves.
-    if (alone && el.contains(document.activeElement)) screenRef.current?.querySelector(`[data-app="${win.id}"] :is(button,a)`)?.focus({ preventScroll: true });
+    // It takes the focus quietly: no ring until a key is pressed again, or a ring would sit on the icon after
+    // every Escape.
+    const icon = alone && el.contains(document.activeElement) ? screenRef.current?.querySelector(`[data-app="${win.id}"] :is(button,a)`) : null;
+    if (icon) {
+      const wake = () => {
+        delete icon.dataset.quiet;
+        window.removeEventListener("keydown", wake, true);
+        icon.removeEventListener("blur", wake);
+      };
+      icon.dataset.quiet = "";
+      icon.focus({ preventScroll: true });
+      window.addEventListener("keydown", wake, true);
+      icon.addEventListener("blur", wake);
+    }
     if (!win.closing) return;
     const t = setTimeout(() => onGone(win.id), 300);
     return () => clearTimeout(t);
@@ -908,7 +976,7 @@ export default function Stage() {
     store("stage-nudge", "1");
     setStack(null);
     setMenu(null);
-    if (MINI.some((m) => m.id === id)) (id === "obsidian" ? loadObsidian : loadMini)();
+    if (MINI.some((m) => m.id === id)) (id === "obsidian" ? loadObsidian : id === "mordi" ? loadMordi : loadMini)();
     setWins((ws) => {
       if (ws.some((w) => w.id === id)) return raised(ws, id);
       const used = ws.filter((w) => !w.closing).map((w) => w.slot);
@@ -930,6 +998,15 @@ export default function Stage() {
   const [index, setIndex] = useState(() => readRoute().index ?? Math.max(0, PROJECT_SLUGS.indexOf(stored("stage-project"))));
   // Which of Projects' three layers is showing. A link straight to one project opens it up.
   const [layer, setLayer] = useState(() => (readRoute().view === "projects" && readRoute().index !== null ? "detail" : "grid"));
+  // Stepping from one layer to the next notes where the demo picture is first (the card that was clicked, or
+  // whichever picture the layer on screen is showing), so it can fly from there to its place in the next.
+  const heroFrom = useRef(null);
+  const changeLayer = (next, from) => {
+    const box = document.querySelector('.app[data-id="projects"] .pjw');
+    const el = from ?? box?.querySelector("[data-hero]");
+    heroFrom.current = el && box ? { box: placeIn(el, box), image: el.querySelector("img")?.currentSrc } : null;
+    setLayer(next);
+  };
   // A first-time visitor gets one quiet line above the dock until they open something.
   const [nudge, setNudge] = useState(() => stored("stage-nudge") !== "1" && readRoute().view === "home");
   const [musicSlot, setMusicSlot] = useState(null);
@@ -947,8 +1024,6 @@ export default function Stage() {
   const [stack, setStack] = useState(null);
   const [menu, setMenu] = useState(null);
   const menuRef = useRef(null);
-  // The note a dock app pops up ("lol"), if one is showing.
-  const [alert, setAlert] = useState(null);
   // The folder Finder opens on. The terminal's "open" can send Finder somewhere else.
   const [finderAt, setFinderAt] = useState([]);
   const drive = useMemo(() => makeDrive({ sections: APPS, links: LINKS, photos: BOAT_PHOTOS }), []);
@@ -1079,7 +1154,7 @@ export default function Stage() {
     const onKey = (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.("input,textarea,select,.dock")) return;
       const inProject = viewId === "projects" && layer !== "grid";
-      if (e.key === "Escape") return inProject ? setLayer(layer === "detail" ? "reel" : "grid") : closeWin(viewId);
+      if (e.key === "Escape") return inProject ? changeLayer(layer === "detail" ? "reel" : "grid") : closeWin(viewId);
       if (!inProject) return;
       const d = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : 0;
       if (!d) return;
@@ -1112,6 +1187,8 @@ export default function Stage() {
     const warm = () => {
       loadMini();
       loadObsidian();
+      loadMordi();
+      loadLately();
     };
     const idle = window.requestIdleCallback ? window.requestIdleCallback(warm, { timeout: 4000 }) : setTimeout(warm, 2500);
     return () => (window.cancelIdleCallback ? window.cancelIdleCallback(idle) : clearTimeout(idle));
@@ -1162,16 +1239,6 @@ export default function Stage() {
       window.removeEventListener("keydown", onKey);
     };
   }, [stack]);
-
-  // The pop-up note closes on Escape, as well as on its button.
-  useEffect(() => {
-    if (!alert) return;
-    const onKey = (e) => {
-      if (e.key === "Escape") setAlert(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [alert]);
 
   // Opening something from Finder, the terminal or the stand-in Claude: a folder goes to Finder, a project to
   // Projects, an app or file to its own window, and a web location to a new tab.
@@ -1230,7 +1297,7 @@ export default function Stage() {
   const bodyOf = (id) => {
     switch (id) {
       case "projects":
-        return <ProjectsApp index={index} setIndex={setIndex} layer={layer} setLayer={setLayer} />;
+        return <ProjectsApp index={index} setIndex={setIndex} layer={layer} setLayer={changeLayer} heroFrom={heroFrom} />;
       case "experience":
         return <ExperienceApp />;
       case "about":
@@ -1239,6 +1306,8 @@ export default function Stage() {
         return <ContactApp />;
       case "resume":
         return <ResumeApp />;
+      case "lately":
+        return <Lately />;
       case "boat":
         return <BoatFolder />;
       case "sailor":
@@ -1254,6 +1323,8 @@ export default function Stage() {
         );
       case "obsidian":
         return <Obsidian email={EMAIL} />;
+      case "mordi":
+        return <Mordi onQuit={() => closeWin("mordi")} />;
       default:
         // The rest are the dock's small apps, which arrive together in one file of their own.
         return <MiniApp id={id} drive={drive} finderAt={finderAt} email={EMAIL} links={LINKS} more={SAFARI_MORE} onOpen={openNode} onExit={() => closeWin("ghostty")} readText={() => stored("stage-sailor") ?? SAILOR_ORIGINAL} />;
@@ -1411,7 +1482,7 @@ export default function Stage() {
                               {face}
                             </a>
                           ) : (
-                            <button type="button" onClick={() => (x.app ? openWin(x.id) : setAlert(x))} data-umami-event={`dock-${x.id}`}>
+                            <button type="button" onClick={() => openWin(x.id)} data-umami-event={`dock-${x.id}`}>
                               {face}
                             </button>
                           )}
@@ -1457,7 +1528,7 @@ export default function Stage() {
                 {wins.map((w) => {
                   const app = WINDOWS.find((a) => a.id === w.id);
                   return (
-                    <AppWindow key={w.id} win={w} name={app.name} wide={APPS.includes(app)} flush={MINI.includes(app)} front={w === frontWin} alone={!frontWin} originOf={originOf} screenRef={screenRef} onFocus={raiseWin} onClose={closeWin} onMin={minWin} onMax={maxWin} onGone={dropWin}>
+                    <AppWindow key={w.id} win={w} name={app.name} wide={APPS.includes(app)} flush={MINI.includes(app) || app.id === "lately"} front={w === frontWin} alone={!frontWin} originOf={originOf} screenRef={screenRef} onFocus={raiseWin} onClose={closeWin} onMin={minWin} onMax={maxWin} onGone={dropWin}>
                       {bodyOf(w.id)}
                     </AppWindow>
                   );
@@ -1505,18 +1576,6 @@ export default function Stage() {
                 ))}
                 <MenuClock />
               </div>
-
-              {/* a note popped up by a dock app */}
-              {alert && (
-                <div className="al" role="alertdialog" aria-label={`${alert.name}: ${alert.alert}`}>
-                  <img src={`/icons/dock/${alert.id}.png`} alt="" width="64" height="64" />
-                  <p>{alert.alert}</p>
-                  <span>{alert.name}</span>
-                  <button type="button" autoFocus onClick={() => setAlert(null)}>
-                    OK
-                  </button>
-                </div>
-              )}
 
               {/* the iPod, popped up from the dock's Music app. Drag it by its body to move it. */}
               {ipodOpen && (
@@ -1569,8 +1628,6 @@ html{background:var(--bg);accent-color:var(--accent-fill);scrollbar-color:color-
 .site .project__link:hover{gap:10px;}
 .footer__visits{display:inline-flex;align-items:center;gap:8px;}
 .footer__pulse{position:relative;width:7px;height:7px;border-radius:50%;background:var(--accent-fill);}
-.footer__pulse::after{content:"";position:absolute;inset:0;border-radius:50%;background:var(--accent-fill);animation:visitPulse 1.8s var(--ease) infinite;}
-@keyframes visitPulse{from{transform:scale(1);opacity:.6;}to{transform:scale(2.8);opacity:0;}}
 `;
 
 const STAGE_CSS = `
@@ -1977,6 +2034,12 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
 }
 /* a window takes the keyboard when it comes forward, but it's a place to work in, not a control: no focus ring */
 .stage .app:focus-visible{outline:none;}
+/* an icon that was quietly handed the keyboard by a closing window shows nothing until a key is pressed */
+.stage [data-quiet]:focus-visible{outline:none;}
+.desk__apps button[data-quiet]:focus-visible:not(:hover){background:none;}
+.desk__apps button[data-quiet]:focus-visible:not(:hover) .da__tile{scale:none;}
+.dk__dock :is(button,a)[data-quiet]:focus-visible:not(:hover){translate:none;}
+.dk__dock :is(button,a)[data-quiet]:focus-visible:not(:hover) b{opacity:0;}
 /* the window in front casts the deeper shadow; the ones behind it grey their lights, like a Mac's */
 .app[data-front]{box-shadow:0 0 0 .5px color-mix(in srgb,var(--text) 26%,transparent),0 34px 70px -22px color-mix(in srgb,var(--shadow) 65%,transparent);}
 .app:not([data-front]) :is(.app__close,.app__min,.app__max){background:rgba(140,140,140,.5);}
@@ -1986,7 +2049,7 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
   inset:var(--win-t) var(--win-l) calc(var(--desk-pad) + var(--ic) * 1.34 + 18px);
 }
 /* green: the window takes the whole screen between the menu bar and the dock */
-.stage .app[data-max]{--win-t:var(--mb);--win-l:0px;--win-r:0px;inset:var(--mb) 0 calc(var(--desk-pad) + var(--ic) * 1.34 + 10px);width:auto;height:auto;}
+.stage .app[data-max]{--win-t:var(--mb);--win-l:0px;--win-r:0px;inset:var(--mb) 0 calc(var(--desk-pad) + var(--ic) * 1.34 + 10px);width:auto;height:auto;max-height:none;}
 .app[data-phase="out"]{animation:appOut .3s cubic-bezier(.55,0,.85,.35) both;}
 @keyframes appIn{from{opacity:0;transform:scale(.06);border-radius:26%;}40%{opacity:1;}to{opacity:1;transform:none;border-radius:var(--win-r,0);}}
 @keyframes appOut{from{opacity:1;transform:none;border-radius:var(--win-r,0);}to{opacity:0;transform:scale(.06);border-radius:26%;}}
@@ -2007,8 +2070,11 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
 .app[data-id="ghostty"] .app__bar{background:#1d1e26;border-color:#0e0f13;}
 .app[data-id="vscodium"] .app__bar{background:#181818;border-color:#2b2b2b;}
 .app[data-id="obsidian"] .app__bar{background:#262626;border-color:#363636;}
+.app[data-id="flstudio"] .app__bar{background:#262c30;border-color:#1f2428;}
+.app[data-id="mordi"] .app__bar{background:#e3edda;border-color:rgba(27,34,21,.16);}
+.app[data-id="mordi"] .app__bar p{color:#1b2215;}
 .app[data-id="slack"] .app__bar{background:#350d36;border-color:#350d36;}
-.app:is([data-id="ghostty"],[data-id="vscodium"],[data-id="obsidian"],[data-id="slack"]) .app__bar p{color:#d6d6d6;}
+.app:is([data-id="ghostty"],[data-id="vscodium"],[data-id="obsidian"],[data-id="slack"],[data-id="flstudio"]) .app__bar p{color:#d6d6d6;}
 .app[data-id="claude"],.app[data-id="claude"] .app__bar{background:color-mix(in srgb,#d97757 5%,var(--bg));}
 .app[data-id="claude"] .app__bar{border-bottom:none;}
 
@@ -2047,20 +2113,6 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
 .wl__go button:active{scale:.97;}
 .wl__tip{margin:22px 0 0;font-size:13.5px;line-height:1.5;color:var(--muted);}
 
-/* a note popped up by a dock app: a small sheet of glass in the middle of the screen */
-.al{
-  position:absolute;z-index:7;inset:0 0 calc(var(--ic) * 1.4) 0;margin:auto;width:220px;height:fit-content;
-  display:flex;flex-direction:column;align-items:center;padding:20px 16px 16px;border-radius:18px;text-align:center;
-  background:color-mix(in srgb,var(--bg) 70%,transparent);backdrop-filter:blur(22px) saturate(190%);-webkit-backdrop-filter:blur(22px) saturate(190%);
-  box-shadow:inset 0 1px 0 var(--rim),inset 0 0 0 1px var(--rim-soft),0 0 0 .5px var(--glass-edge),0 30px 60px -22px color-mix(in srgb,var(--shadow) 65%,transparent);
-  animation:ipwIn .3s cubic-bezier(.2,.85,.2,1) both;
-}
-.al img{display:block;}
-.al p{margin:8px 0 0;font-size:17px;font-weight:700;}
-.al span{font-size:12px;color:var(--muted);}
-.al button{align-self:stretch;margin-top:14px;padding:7px 0;border:none;border-radius:9px;background:#1f86ea;color:#fff;font-size:13.5px;font-weight:500;cursor:pointer;}
-.al button:hover{background:#1976d2;}
-
 /* a window's bar: three lights (the red one closes it) and the app's name, on a strip of its own */
 .app__bar{
   position:relative;flex:none;display:flex;align-items:center;justify-content:center;height:38px;cursor:default;
@@ -2090,7 +2142,12 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
 
 /* Projects: three layers in one window. It gets a little more of the window than the other sections. */
 .app[data-id="projects"] .app__body{padding:clamp(12px,1.5vw,20px) clamp(16px,2.2vw,30px) clamp(16px,2vw,26px);}
-.pj{height:100%;min-height:0;}
+.pjw{position:relative;height:100%;min-height:0;}
+.pj{height:100%;min-height:0;animation:pjIn .32s var(--ease) both;}
+@keyframes pjIn{from{opacity:0;}}
+/* the stand-in for the demo picture while it flies between layers */
+.pj__ghost{position:absolute;z-index:2;overflow:hidden;border-radius:12px;background:var(--surface);pointer-events:none;box-shadow:0 24px 46px -28px color-mix(in srgb,var(--shadow) 80%,transparent);}
+.pj__ghost img{display:block;width:100%;height:100%;object-fit:cover;object-position:top;}
 /* layer one: every project, as wide cards that share the window between them */
 .stage .pj--grid{
   list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:minmax(0,1fr);
@@ -2101,7 +2158,7 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
   flex:1;min-width:0;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:minmax(0,1fr) auto;align-items:baseline;gap:7px 10px;
   padding:0;border:none;background:none;cursor:pointer;text-align:left;
 }
-.pj__thumb{grid-column:1/-1;align-self:stretch;min-height:0;border-radius:10px;overflow:hidden;background:#161617;transition:translate .25s var(--ease),box-shadow .25s var(--ease);}
+.pj__thumb{grid-column:1/-1;align-self:stretch;min-height:0;border-radius:10px;overflow:hidden;background:var(--surface);transition:translate .25s var(--ease),box-shadow .25s var(--ease);}
 .pj__thumb img{display:block;width:100%;height:100%;object-fit:cover;object-position:top;}
 .pj--grid b{font-family:var(--font-display);font-weight:400;font-size:clamp(15px,1.4vw,20px);letter-spacing:-.012em;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .pj--grid i{font-family:var(--mono);font-style:normal;font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);white-space:nowrap;}
@@ -2116,7 +2173,7 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
 /* layer two: the reel. The chosen demo in the middle, the ones either side dimmed and cut off by the window. */
 .pj--reel{display:flex;flex-direction:column;align-items:center;overflow:hidden;text-align:center;}
 .pj__row{flex:1;min-height:0;align-self:stretch;display:flex;align-items:center;justify-content:center;gap:clamp(12px,1.8vw,24px);}
-.pj__row button{position:relative;flex:none;height:100%;aspect-ratio:16/10;padding:0;border:none;border-radius:12px;overflow:hidden;background:#161617;cursor:pointer;}
+.pj__row button{position:relative;flex:none;height:100%;aspect-ratio:16/10;padding:0;border:none;border-radius:12px;overflow:hidden;background:var(--surface);cursor:pointer;}
 .pj__row img{display:block;width:100%;height:100%;object-fit:cover;object-position:top;}
 .pj__row .pj__peek{height:66%;opacity:.38;transition:opacity .25s var(--ease);}
 .pj__row .pj__peek:is(:hover,:focus-visible){opacity:.7;}
@@ -2215,11 +2272,18 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
 .ab__facts dd{margin:5px 0 0;font-size:clamp(15.5px,1.3vw,18px);line-height:1.35;}
 
 /* Contact: a business card. Its window is small and sits in the middle of the screen, sized like a card. */
-.app[data-id="contact"]{
-  --win-l:max(16px,calc((var(--sw) - 22px - 460px) / 2));
-  --win-t:max(calc(var(--mb) + 10px),calc((var(--sw) / 1.56 - 22px - 300px) / 2 - var(--ic) * .5));
-  inset:var(--win-t) auto auto var(--win-l);width:min(460px,calc(100% - 32px));height:300px;
+.app[data-id="contact"]{--win-w:460px;--win-h:300px;}
+/* a few windows are a fixed, small size and sit in the middle of the screen, a little above centre: the business
+   card here, and the sequencer and the machines list from the dock. --win-w and --win-h say how big. */
+.app:is([data-id="contact"],[data-id="flstudio"],[data-id="tailscale"],[data-id="mordi"]){
+  --win-l:max(16px,calc((var(--sw) - 22px - var(--win-w)) / 2));
+  --win-t:max(calc(var(--mb) + 10px),calc((var(--sw) / 1.56 - 22px - var(--win-h)) / 2 - var(--ic) * .5));
+  inset:var(--win-t) auto auto var(--win-l);width:min(var(--win-w),calc(100% - 32px));height:var(--win-h);
+  max-height:calc(100% - var(--mb) - var(--desk-pad) - var(--ic) * 1.34 - 24px);
 }
+.app[data-id="flstudio"]{--win-w:700px;--win-h:288px;}
+.app[data-id="tailscale"]{--win-w:340px;--win-h:420px;}
+.app[data-id="mordi"]{--win-w:336px;--win-h:540px;}
 .app[data-id="contact"] .app__body{padding:0;overflow:hidden;}
 .bc{position:relative;display:flex;flex-direction:column;justify-content:space-between;height:100%;padding:28px 30px 26px;}
 .bc__boat{position:absolute;top:26px;right:28px;width:30px;height:30px;fill:currentColor;}
@@ -2324,9 +2388,8 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
   .stage__mac{--mb:0px;}
   .mb,.app__min,.app__max{display:none;}
   .wins{z-index:80;}
-  .stage .app,.stage .app[data-max]{inset:0;width:auto;height:auto;--win-t:0px;--win-l:0px;--win-r:0;box-shadow:none;translate:none;transform-origin:var(--ox,50%) var(--oy,100%);}
+  .stage .app,.stage .app[data-max]{inset:0;width:auto;height:auto;max-height:none;--win-t:0px;--win-l:0px;--win-r:0;box-shadow:none;translate:none;transform-origin:var(--ox,50%) var(--oy,100%);}
   .app__bar{touch-action:auto;}
-  .al{position:fixed;z-index:95;inset:0;}
   .dk__nudge{grid-column:1/-1;order:2;margin:0;}
   /* a phone's home screen: the two widgets side by side on top, then the sections, then the project apps */
   .stage .desk__widgets{display:flex;flex-wrap:wrap;--wg:min(40vw,170px);margin-bottom:4px;}
@@ -2341,7 +2404,7 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
   .app__body{padding:8px var(--pad) 32px;}
   /* Projects on a phone: the grid is two across and scrolls, the reel is sized by its width, and the opened
      project stacks the picture over the write-up */
-  .pj{height:auto;}
+  .pjw,.pj{height:auto;}
   .stage .pj--grid{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:auto;gap:18px 12px;}
   .pj__thumb{aspect-ratio:16/10;}
   .pj--grid button{grid-template-columns:minmax(0,1fr);}
@@ -2373,7 +2436,7 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
   .stage__foot{flex-basis:100%;margin:0;}
 }
 @media (prefers-reduced-motion:reduce){
-  .desk__lights i,.app,.pj__shot img,.pj__notes,.pj__focus,.pj__cap,.pj--detail .pj__shot,.mt__stops article,.stage .dock__tab,.ipod__eq i,.ipw,.stk,.al{animation:none !important;}
+  .desk__lights i,.app,.pj,.pj__shot img,.pj__notes,.pj__focus,.pj__cap,.pj--detail .pj__shot,.mt__stops article,.stage .dock__tab,.ipod__eq i,.ipw,.stk{animation:none !important;}
   .pj__shot img,.dk__dock :is(button,a){transition:none !important;}
   .pj__shot img{translate:0 0 !important;}
 }

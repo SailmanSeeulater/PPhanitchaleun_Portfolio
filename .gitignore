@@ -37,3 +37,9 @@ dist-ssr
 
 # design-drafts
 design-drafts
+
+# The Lately server: its local database and built program
+server/*.db
+server/*.db-*
+server/portfolio-api
+api-build

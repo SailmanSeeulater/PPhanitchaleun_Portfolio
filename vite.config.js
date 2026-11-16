@@ -32,6 +32,8 @@ async function visitorCount() {
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [react()],
+  // While working locally, /api goes to the Lately server (npm run api). On the real site nginx does this.
+  server: { proxy: { '/api': 'http://127.0.0.1:8787' } },
   // Two pages: the Showcase site at / and the previous multi-layout site at /archive/.
   build: { rollupOptions: { input: { main: 'index.html', archive: 'archive/index.html' } } },
   define: { __AI_STATS__: JSON.stringify(AI_STATS), __VISITOR_COUNT__: JSON.stringify(await visitorCount()) },
