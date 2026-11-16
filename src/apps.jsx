@@ -1,7 +1,7 @@
 // The small apps on the laptop's dock (Finder, Safari, Slack, Claude, VSCodium, Ghostty, FL Studio, Tailscale)
 // and their styles. Each one is a toy that does one real thing; none of them talks to a server of mine. This file is only fetched when one of
 // them is first opened (or once the page has gone quiet), so it brings its own styles with it.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { AppIcon, DriveArt, FolderArt, TextArt } from "./art";
 import { EXPERIENCE, GITHUB, PROJECTS } from "./data";
 import { nodeAt } from "./drive";
@@ -158,24 +158,185 @@ const HELP = `Things that work here:
   open <thing>    open a file, folder or app on the laptop
   whoami          who you are
   neofetch        about this machine
+  snake           a game: eat, grow, don't hit anything
   echo, date, clear, exit`;
+
+/* ---- snake, run from Ghostty. The terminal hands it the whole screen, the way a real one does for a program
+   like this, and takes it back when the game is quit. The board is text: every cell is two characters wide. ---- */
+const SNAKE_TURNS = {
+  ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
+  w: [0, -1], s: [0, 1], a: [-1, 0], d: [1, 0],
+  k: [0, -1], j: [0, 1], h: [-1, 0], l: [1, 0],
+};
+const sameCell = (a, b) => a[0] === b[0] && a[1] === b[1];
+
+function snakeStart({ cols, rows, best }) {
+  const y = Math.floor(rows / 2);
+  const x = Math.max(3, Math.floor(cols / 4));
+  return { cols, rows, best, snake: [[x, y], [x - 1, y], [x - 2, y]], dir: [1, 0], queue: [], food: [Math.min(cols - 2, x + Math.ceil(cols / 3)), y], score: 0, phase: "ready" };
+}
+
+// Every change to the game goes through here. Anything random comes in with the action, so the same action
+// always gives the same board.
+function snakeStep(g, action) {
+  switch (action.type) {
+    case "restart":
+      return snakeStart(g);
+    case "pause":
+      return g.phase === "play" ? { ...g, phase: "paused" } : g.phase === "paused" ? { ...g, phase: "play" } : g;
+    case "pause-if-playing":
+      return g.phase === "play" ? { ...g, phase: "paused" } : g;
+    case "turn": {
+      if (g.phase === "over") return g;
+      // Measured against the last turn waiting, so two quick presses both count. Turning back on yourself doesn't.
+      const last = g.queue.at(-1) ?? g.dir;
+      const sideways = (action.dir[0] === 0) !== (last[0] === 0);
+      return { ...g, phase: "play", queue: sideways && g.queue.length < 2 ? [...g.queue, action.dir] : g.queue };
+    }
+    case "tick": {
+      if (g.phase !== "play") return g;
+      const [dir, ...queue] = g.queue.length ? g.queue : [g.dir];
+      const head = [g.snake[0][0] + dir[0], g.snake[0][1] + dir[1]];
+      const eats = sameCell(head, g.food);
+      // Unless it has just eaten, the tail moves on this step, so its cell is free to move into.
+      const body = eats ? g.snake : g.snake.slice(0, -1);
+      if (head[0] < 0 || head[1] < 0 || head[0] >= g.cols || head[1] >= g.rows || body.some((c) => sameCell(c, head))) return { ...g, phase: "over", best: Math.max(g.best, g.score) };
+      const snake = [head, ...body];
+      if (!eats) return { ...g, snake, dir, queue };
+      const score = g.score + 1;
+      const free = [];
+      for (let y = 0; y < g.rows; y++) for (let x = 0; x < g.cols; x++) if (!snake.some((c) => sameCell(c, [x, y]))) free.push([x, y]);
+      if (!free.length) return { ...g, snake, dir, queue, score, food: [-1, -1], phase: "over", won: true, best: Math.max(g.best, score) };
+      return { ...g, snake, dir, queue, score, food: free[Math.floor(action.r * free.length)] };
+    }
+    default:
+      return g;
+  }
+}
+
+function SnakeGame({ cols, rows, onQuit }) {
+  const [g, dispatch] = useReducer(snakeStep, { cols, rows, best: Number(stored("stage-snake")) || 0 }, snakeStart);
+  const boxRef = useRef(null);
+  const drag = useRef(null);
+  const [touch] = useState(() => !!window.matchMedia?.("(pointer:coarse)").matches);
+  // It gets a little quicker with every bite.
+  const pace = Math.max(70, 135 - g.score * 3);
+
+  useEffect(() => {
+    boxRef.current?.focus({ preventScroll: true });
+  }, []);
+  useEffect(() => {
+    if (g.phase !== "play") return undefined;
+    const timer = setInterval(() => dispatch({ type: "tick", r: Math.random() }), pace);
+    return () => clearInterval(timer);
+  }, [g.phase, pace]);
+  useEffect(() => {
+    if (g.phase === "over") store("stage-snake", String(g.best));
+  }, [g.phase, g.best]);
+  // Looking away pauses it.
+  useEffect(() => {
+    const hide = () => document.hidden && dispatch({ type: "pause-if-playing" });
+    document.addEventListener("visibilitychange", hide);
+    return () => document.removeEventListener("visibilitychange", hide);
+  }, []);
+
+  const quit = () => onQuit(g.score, Math.max(g.best, g.score));
+  const onKeyDown = (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    const dir = SNAKE_TURNS[key];
+    if (dir) dispatch({ type: "turn", dir });
+    else if (key === "p" || key === " ") dispatch({ type: "pause" });
+    else if (key === "r" || (key === "Enter" && g.phase === "over")) dispatch({ type: "restart" });
+    else if (key === "q" || key === "Escape") quit();
+    else return;
+    // The desktop behind listens for arrows and Escape too. These ones are the game's.
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  // On a phone there are no keys: a swipe across the board steers.
+  const onPointerUp = (e) => {
+    const from = drag.current;
+    drag.current = null;
+    if (!from) return;
+    const dx = e.clientX - from.x;
+    const dy = e.clientY - from.y;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 18) return;
+    dispatch({ type: "turn", dir: Math.abs(dx) > Math.abs(dy) ? [Math.sign(dx), 0] : [0, Math.sign(dy)] });
+  };
+
+  const edge = `+${"-".repeat(g.cols * 2)}+`;
+  const board = [];
+  for (let y = 0; y < g.rows; y++) {
+    const cells = [];
+    for (let x = 0; x < g.cols; x++) {
+      const at = g.snake.findIndex((c) => c[0] === x && c[1] === y);
+      const kind = at === 0 ? "head" : at > 0 ? "body" : g.food[0] === x && g.food[1] === y ? "food" : null;
+      cells.push(kind ? <span key={x} className={`tm__${kind}`}>{"  "}</span> : "  ");
+    }
+    board.push(<span key={y}>|{cells}|{"\n"}</span>);
+  }
+  const status = { ready: touch ? "Swipe to start." : "Press an arrow key to start.", play: touch ? "Swipe to steer." : "Arrows or WASD steer.", paused: "Paused.", over: g.won ? "You filled the board. Nothing left to eat." : "Game over." }[g.phase];
+
+  return (
+    <div className="tm tm--game" ref={boxRef} tabIndex={0} onKeyDown={onKeyDown} role="application" aria-label={`Snake. Score ${g.score}. ${status}`}>
+      <p className="tm__score">
+        snake <span>score {g.score}</span> <span>best {Math.max(g.best, g.score)}</span>
+        {g.phase === "over" ? (
+          <button type="button" onClick={() => dispatch({ type: "restart" })}>[r] again</button>
+        ) : (
+          <button type="button" onClick={() => dispatch({ type: "pause" })}>[p] {g.phase === "paused" ? "resume" : "pause"}</button>
+        )}
+        <button type="button" onClick={quit}>[q] quit</button>
+      </p>
+      <pre className="tm__board" onPointerDown={(e) => (drag.current = { x: e.clientX, y: e.clientY })} onPointerUp={onPointerUp} onPointerCancel={() => (drag.current = null)}>
+        {edge}
+        {"\n"}
+        {board}
+        {edge}
+      </pre>
+      <p className="tm__keys" aria-live="polite">
+        {status}
+      </p>
+    </div>
+  );
+}
 
 function TerminalApp({ drive, onOpen, onExit, readText }) {
   const [lines, setLines] = useState([{ out: "Last login: just now, on a laptop inside a website.\nType help to see what works." }]);
   const [cwd, setCwd] = useState([]);
   const [input, setInput] = useState("");
+  // While snake is running: how big a board fits this window.
+  const [game, setGame] = useState(null);
   const past = useRef({ list: [], at: 0 });
   const inputRef = useRef(null);
   const boxRef = useRef(null);
   const label = (path) => (path.length ? path[path.length - 1] : "~");
 
   useEffect(() => {
-    // On a phone, focusing would throw the keyboard up over the window the moment it opens.
-    if (window.matchMedia?.("(pointer:fine)").matches) inputRef.current?.focus({ preventScroll: true });
-  }, []);
+    // On a phone, focusing would throw the keyboard up over the window the moment it opens. The same effect
+    // puts the cursor back in the prompt when a game ends.
+    if (!game && window.matchMedia?.("(pointer:fine)").matches) inputRef.current?.focus({ preventScroll: true });
+  }, [game]);
   useEffect(() => {
     boxRef.current?.scrollTo(0, boxRef.current.scrollHeight);
-  }, [lines]);
+  }, [lines, game]);
+
+  // The biggest board that fits the window as it is now, measured in characters of the terminal's own type.
+  const boardSize = () => {
+    const box = boxRef.current;
+    // Laid-out width, not the size on screen: a window that is still growing out of its icon is drawn smaller
+    // than it really is.
+    const probe = document.createElement("span");
+    probe.style.cssText = "position:absolute;visibility:hidden;width:100ch;";
+    box.append(probe);
+    const cell = (probe.offsetWidth / 100 || 7.5) * 2;
+    probe.remove();
+    const fit = (n, low, high) => Math.min(high, Math.max(low, Math.floor(n)));
+    // A cell is two characters wide and as tall as that is wide. Around the board go its border, a line above
+    // and a line below.
+    return { cols: fit((box.clientWidth - 28) / cell - 1, 8, 30), rows: fit((box.clientHeight - 72) / cell - 2, 6, 18) };
+  };
 
   // Follows a typed path from where you are. Names match without regard to capitals.
   const resolve = (arg) => {
@@ -225,6 +386,9 @@ function TerminalApp({ drive, onOpen, onExit, readText }) {
         return "";
       case "sudo":
         return "visitor is not in the sudoers file. This incident will be reported.";
+      case "snake":
+        setGame(boardSize());
+        return "";
       case "neofetch":
         return `visitor@latesailor\n------------------\nOS: latesailor.dev, React on Vite\nHost: a laptop drawn in CSS\nShell: about twelve commands\nDisk: ${drive.name}, ${PROJECTS.length} projects\nUptime: since you opened the tab\nCode: ${GITHUB}`;
       case "ls": {
@@ -283,6 +447,18 @@ function TerminalApp({ drive, onOpen, onExit, readText }) {
       if (hits.length === 1) setInput(input.slice(0, at) + hits[0].name + (hits[0].kind === "folder" ? "/" : ""));
     }
   };
+
+  if (game)
+    return (
+      <SnakeGame
+        cols={game.cols}
+        rows={game.rows}
+        onQuit={(score, best) => {
+          setGame(null);
+          setLines((l) => [...l, { out: `Score ${score}. Best ${best}.` }]);
+        }}
+      />
+    );
 
   return (
     <div className="tm" ref={boxRef} onClick={() => !window.getSelection()?.toString() && inputRef.current?.focus({ preventScroll: true })}>
@@ -1032,6 +1208,18 @@ const APPS_CSS = `
 .tm form{display:flex;gap:.6em;}
 .tm label{flex:none;}
 .tm input{flex:1;min-width:0;padding:0;border:none;outline:none;background:none;color:inherit;font:inherit;caret-color:#e3e5ea;}
+/* snake: the board is text, two characters to a cell, with each line as tall as a cell is wide. */
+.tm--game{padding-block:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:default;outline:none;user-select:none;-webkit-user-select:none;}
+.tm__score{display:flex;flex-wrap:wrap;justify-content:center;gap:0 1.4em;color:#7ee0a3;}
+.tm__score span{color:#c3c7d1;}
+.tm .tm__board{flex:none;line-height:2ch;white-space:pre;overflow-wrap:normal;color:#5d6270;touch-action:none;}
+.tm__board span span{display:inline-block;width:2ch;height:2ch;vertical-align:top;}
+.tm__body{background:#4fb37a;}
+.tm__head{background:#a5f0c2;}
+.tm__food{background:#ff7a70;border-radius:50%;scale:.8;}
+.tm__keys{color:#9aa0ad;text-align:center;}
+.tm__score button{padding:0;border:none;background:none;color:#7fb4ff;font:inherit;cursor:pointer;}
+.tm__score button:hover{color:#fff;}
 
 /* ---- VSCodium: its own dark colours in every theme ---- */
 .vs{display:grid;grid-template-columns:clamp(130px,18%,190px) minmax(0,1fr);height:100%;background:#1f1f1f;color:#ccc;font-size:13px;}

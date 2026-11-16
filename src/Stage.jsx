@@ -791,13 +791,17 @@ function ResumeApp() {
   );
 }
 
-// A soft tick when an app opens or closes. It only sounds while the visitor has music playing,
-// so the site stays silent unless they chose to hear it.
+// A soft tick when an app opens or closes. It follows the iPod's volume, so muting the music mutes this too.
 let tickCtx = null;
 function tick(up) {
-  if (!document.querySelector(".dock__eq.is-playing")) return;
   try {
+    const saved = localStorage.getItem("volume");
+    const volume = saved !== null && Number(saved) >= 0 && Number(saved) <= 100 ? Number(saved) : 70;
+    if (volume === 0) return;
     tickCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+    // A browser keeps sound switched off until the visitor has clicked or pressed something.
+    if (tickCtx.state === "suspended") tickCtx.resume();
+    const peak = 0.07 * (volume / 100);
     const t = tickCtx.currentTime;
     const osc = tickCtx.createOscillator();
     const gain = tickCtx.createGain();
@@ -805,7 +809,7 @@ function tick(up) {
     osc.frequency.setValueAtTime(up ? 520 : 760, t);
     osc.frequency.exponentialRampToValueAtTime(up ? 880 : 420, t + 0.09);
     gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(0.05, t + 0.012);
+    gain.gain.exponentialRampToValueAtTime(peak, t + 0.012);
     gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
     osc.connect(gain).connect(tickCtx.destination);
     osc.start(t);
