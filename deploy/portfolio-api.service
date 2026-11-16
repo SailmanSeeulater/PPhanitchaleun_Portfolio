@@ -1,0 +1,44 @@
+# The server behind Lately (server/ in this repo). Lives at /etc/systemd/system/portfolio-api.service.
+# deploy/README.md has the steps for putting it there.
+[Unit]
+Description=Portfolio API (Lately posts)
+After=network.target
+
+[Service]
+ExecStart=/opt/portfolio-api/portfolio-api
+# Holds API_ADMIN_HASH. Readable by root only; systemd reads it before handing over to the service's own user.
+EnvironmentFile=/etc/portfolio-api/env
+Environment=API_ADDR=127.0.0.1:8787
+Environment=API_DB=/var/lib/portfolio-api/lately.db
+User=portfolio-api
+Group=portfolio-api
+# /var/lib/portfolio-api, made on first start and owned by the service's user. The database lives here.
+StateDirectory=portfolio-api
+StateDirectoryMode=0750
+Restart=on-failure
+RestartSec=2
+
+# This machine has 1 GB of memory. Go is asked to stay under 48 MB; past 96 MB the service is stopped and
+# started again, and it is never pushed into swap, so it can't slow down what else runs here.
+Environment=GOMEMLIMIT=48MiB
+MemoryMax=96M
+MemorySwapMax=0
+TasksMax=64
+
+# It needs the network and its own folder, nothing else.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

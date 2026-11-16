@@ -34,6 +34,18 @@ jobs:
       - run: npm run lint
       - run: npm run build
 
+      # The server behind Lately (server/): tested, then built as one program for the VPS (64-bit Intel Linux).
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - name: Test and build the API
+        working-directory: server
+        run: |
+          go vet ./...
+          go test ./...
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../api-build/portfolio-api .
+
       - name: Configure SSH
         env:
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
@@ -74,7 +86,30 @@ jobs:
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
             dist/ "$VPS_USER@$VPS_HOST:$WEB_ROOT/"
 
+      # Only once the service has been set up on the server by hand (deploy/README.md). Before that there is
+      # nothing to restart, so the upload is skipped and the site deploys as it always has.
+      - name: Upload the API and restart it
+        id: api
+        run: |
+          REMOTE="ssh -i $HOME/.ssh/deploy_key -o StrictHostKeyChecking=yes $VPS_USER@$VPS_HOST"
+          if ! $REMOTE 'systemctl cat portfolio-api.service > /dev/null 2>&1'; then
+            echo "::notice::portfolio-api isn't set up on the server yet (deploy/README.md), so the API wasn't uploaded."
+            echo "installed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          rsync -z --checksum \
+            --chmod=F755 --chown=root:root \
+            --rsync-path="sudo rsync" \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
+            api-build/portfolio-api "$VPS_USER@$VPS_HOST:/opt/portfolio-api/portfolio-api"
+          $REMOTE 'sudo systemctl restart portfolio-api && sleep 2 && systemctl is-active --quiet portfolio-api'
+          echo "installed=true" >> "$GITHUB_OUTPUT"
+
       - name: Smoke test
         run: |
           curl -fsS https://latesailor.dev/ | grep -q "Phanitchaleun"
           curl -fsSI https://latesailor.dev/music/battlement.mp3 | grep -qi "content-type: audio/mpeg"
+
+      - name: Smoke test the API
+        if: steps.api.outputs.installed == 'true'
+        run: curl -fsS https://latesailor.dev/api/posts | grep -q '"posts"'

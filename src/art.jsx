@@ -45,6 +45,8 @@ const APP_ICONS = {
   about: <path d="M12 12.5A3.75 3.75 0 1 0 12 5a3.75 3.75 0 0 0 0 7.5zM5 20c.6-3.4 3.3-5 7-5s6.4 1.6 7 5" />,
   contact: <path d="M4 6.5h16v11H4zM4.5 7l7.5 6 7.5-6" />,
   resume: <path d="M7 3.500h7l4 4V20.500H7zM13.500 3.500V8H18M10 12.500h5M10 16h5" />,
+  // a placeholder for now: the sailboat
+  lately: <path d="M11.500 3.500v12H5zM13.500 7v8.500H19zM3 18h18l-2.500 3h-13z" />,
 };
 const AppIcon = ({ id }) => (
   <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

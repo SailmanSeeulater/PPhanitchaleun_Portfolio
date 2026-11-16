@@ -1,5 +1,5 @@
-// The small apps on the laptop's dock (Finder, Safari, Slack, Claude, VSCodium, Ghostty) and their styles. Each
-// one is a toy that does one real thing; none of them talks to a server. This file is only fetched when one of
+// The small apps on the laptop's dock (Finder, Safari, Slack, Claude, VSCodium, Ghostty, FL Studio, Tailscale)
+// and their styles. Each one is a toy that does one real thing; none of them talks to a server of mine. This file is only fetched when one of
 // them is first opened (or once the page has gone quiet), so it brings its own styles with it.
 import { useEffect, useRef, useState } from "react";
 import { AppIcon, DriveArt, FolderArt, TextArt } from "./art";
@@ -681,9 +681,13 @@ function SafariApp({ links, more }) {
           {more.map((l) => (
             <li key={l.name}>
               <a href={l.href} target={l.href.startsWith("/") ? undefined : "_blank"} rel="noreferrer" data-umami-event={l.event}>
-                <span className="sf__letter" style={{ background: l.color }} aria-hidden="true">
-                  {l.name.charAt(0)}
-                </span>
+                {l.icon ? (
+                  <img src={l.icon} alt="" width="56" height="56" />
+                ) : (
+                  <span className="sf__letter" style={{ background: l.color }} aria-hidden="true">
+                    {l.name.charAt(0)}
+                  </span>
+                )}
                 <b>{l.name}</b>
               </a>
             </li>
@@ -702,6 +706,259 @@ function SafariApp({ links, more }) {
           ))}
         </ul>
       </div>
+    </div>
+  );
+}
+
+/* ---- FL Studio: a channel rack. Four drums, sixteen steps and a play button. The sounds are made on the spot by
+   the browser, so there is nothing to download, and the steps are fired by the audio clock, not a timer, so the
+   beat stays steady. ---- */
+const DRUMS = ["Kick", "Clap", "Hat", "Snare"];
+const STEPS = 16;
+// The beat it opens with: four on the floor, claps on two and four, hats in between.
+const STARTER = { Kick: [0, 4, 8, 12], Clap: [4, 12], Hat: [2, 6, 10, 14], Snare: [15] };
+const blank = () => Object.fromEntries(DRUMS.map((d) => [d, Array(STEPS).fill(false)]));
+const starter = () => Object.fromEntries(DRUMS.map((d) => [d, Array.from({ length: STEPS }, (_, i) => STARTER[d].includes(i))]));
+
+// One drum hit, built from an oscillator or a burst of noise, starting at the given moment on the audio clock.
+function drumHit(ctx, noise, drum, at) {
+  const gain = ctx.createGain();
+  gain.connect(ctx.destination);
+  const burst = (filterType, frequency, q = 1) => {
+    const src = ctx.createBufferSource();
+    src.buffer = noise;
+    const filter = ctx.createBiquadFilter();
+    filter.type = filterType;
+    filter.frequency.value = frequency;
+    filter.Q.value = q;
+    src.connect(filter).connect(gain);
+    src.start(at);
+    src.stop(at + 0.4);
+  };
+  if (drum === "Kick") {
+    const osc = ctx.createOscillator();
+    osc.frequency.setValueAtTime(150, at);
+    osc.frequency.exponentialRampToValueAtTime(42, at + 0.13);
+    gain.gain.setValueAtTime(0.9, at);
+    gain.gain.exponentialRampToValueAtTime(0.001, at + 0.34);
+    osc.connect(gain);
+    osc.start(at);
+    osc.stop(at + 0.36);
+  } else if (drum === "Hat") {
+    burst("highpass", 7200);
+    gain.gain.setValueAtTime(0.28, at);
+    gain.gain.exponentialRampToValueAtTime(0.001, at + 0.06);
+  } else if (drum === "Snare") {
+    burst("highpass", 1700);
+    const tone = ctx.createOscillator();
+    tone.type = "triangle";
+    tone.frequency.setValueAtTime(210, at);
+    tone.frequency.exponentialRampToValueAtTime(120, at + 0.08);
+    tone.connect(gain);
+    tone.start(at);
+    tone.stop(at + 0.12);
+    gain.gain.setValueAtTime(0.5, at);
+    gain.gain.exponentialRampToValueAtTime(0.001, at + 0.18);
+  } else {
+    // A clap: the same noise let through three times in quick succession, then left to ring.
+    burst("bandpass", 1300, 0.9);
+    gain.gain.setValueAtTime(0.0001, at);
+    [0, 0.011, 0.022].forEach((gap) => {
+      gain.gain.setValueAtTime(0.55, at + gap);
+      gain.gain.exponentialRampToValueAtTime(0.08, at + gap + 0.009);
+    });
+    gain.gain.setValueAtTime(0.5, at + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.001, at + 0.22);
+  }
+}
+
+function SequencerApp() {
+  const [pattern, setPattern] = useState(starter);
+  const [muted, setMuted] = useState([]);
+  const [bpm, setBpm] = useState(128);
+  const [playing, setPlaying] = useState(false);
+  const [step, setStep] = useState(-1);
+  // The scheduler reads these as they are at each step, so edits made while it plays are heard at once.
+  const live = useRef({ pattern, muted, bpm });
+  const audio = useRef(null);
+  useEffect(() => {
+    live.current = { pattern, muted, bpm };
+  }, [pattern, muted, bpm]);
+
+  const ready = () => {
+    if (audio.current) return audio.current;
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const noise = ctx.createBuffer(1, ctx.sampleRate * 0.4, ctx.sampleRate);
+    const data = noise.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    audio.current = { ctx, noise };
+    return audio.current;
+  };
+  // While playing: every 25ms, line up any steps due in the next tenth of a second.
+  useEffect(() => {
+    if (!playing) return;
+    const { ctx, noise } = ready();
+    ctx.resume();
+    let next = ctx.currentTime + 0.06;
+    let at = 0;
+    const lights = [];
+    const timer = setInterval(() => {
+      while (next < ctx.currentTime + 0.1) {
+        const { pattern: p, muted: m, bpm: tempo } = live.current;
+        for (const drum of DRUMS) if (p[drum][at] && !m.includes(drum)) drumHit(ctx, noise, drum, next);
+        const shown = at;
+        lights.push(setTimeout(() => setStep(shown), Math.max(0, (next - ctx.currentTime) * 1000)));
+        next += 60 / tempo / 4;
+        at = (at + 1) % STEPS;
+      }
+    }, 25);
+    return () => {
+      clearInterval(timer);
+      lights.forEach(clearTimeout);
+      setStep(-1);
+    };
+  }, [playing]);
+  // Closing the window stops the sound for good.
+  useEffect(() => () => audio.current?.ctx.close(), []);
+
+  const toggle = (drum, i) => setPattern((p) => ({ ...p, [drum]: p[drum].map((on, k) => (k === i ? !on : on)) }));
+  const audition = (drum) => {
+    const { ctx, noise } = ready();
+    ctx.resume();
+    drumHit(ctx, noise, drum, ctx.currentTime + 0.01);
+  };
+
+  return (
+    <div
+      className="fl"
+      onKeyDown={(e) => {
+        if (e.key !== " " || e.target.closest("input")) return;
+        e.preventDefault();
+        setPlaying((on) => !on);
+      }}
+    >
+      <div className="fl__top">
+        <button type="button" className="fl__play" aria-pressed={playing} onClick={() => setPlaying((on) => !on)} aria-label={playing ? "Stop" : "Play"}>
+          <svg viewBox="0 0 24 24" aria-hidden="true">{playing ? <path d="M7 7h10v10H7z" /> : <path d="M8 5.500v13l11-6.500z" />}</svg>
+        </button>
+        <label className="fl__tempo">
+          <b>{bpm}</b>
+          <span>BPM</span>
+          <input type="range" min="70" max="180" value={bpm} onChange={(e) => setBpm(Number(e.target.value))} aria-label="Tempo" />
+        </label>
+        <span className="fl__name">Pattern 1</span>
+        <button type="button" className="fl__text" onClick={() => setPattern(starter)}>
+          Reset
+        </button>
+        <button type="button" className="fl__text" onClick={() => setPattern(blank)}>
+          Clear
+        </button>
+      </div>
+      <div className="fl__rack">
+        {DRUMS.map((drum) => (
+          <div key={drum} className={muted.includes(drum) ? "fl__row is-muted" : "fl__row"}>
+            <button
+              type="button"
+              className="fl__led"
+              aria-pressed={!muted.includes(drum)}
+              aria-label={`${drum} ${muted.includes(drum) ? "muted" : "on"}`}
+              onClick={() => setMuted((m) => (m.includes(drum) ? m.filter((d) => d !== drum) : [...m, drum]))}
+            />
+            <button type="button" className="fl__chan" onClick={() => audition(drum)} title={`Hear the ${drum.toLowerCase()}`}>
+              {drum}
+            </button>
+            <div className="fl__steps">
+              {pattern[drum].map((on, i) => (
+                <button key={i} type="button" className={i === step ? "is-now" : undefined} aria-pressed={on} aria-label={`${drum}, step ${i + 1}`} onClick={() => toggle(drum, i)} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---- Tailscale: the machines I run, and whether each one answers right now. The browser asks each site for its
+   front page and times the answer; nothing is read from it. The switch at the top stops the asking. ---- */
+const MACHINES = [
+  { name: "latesailor.dev", note: "this site", href: "https://latesailor.dev/" },
+  ...PROJECTS.filter((p) => p.live).map((p) => ({ name: p.name, href: p.live })),
+].map((m) => ({ ...m, host: new URL(m.href).host }));
+
+function TailscaleApp() {
+  const [on, setOn] = useState(true);
+  // What each machine said the last time it was asked: nothing yet, an answer and how long it took, or silence.
+  const [seen, setSeen] = useState({});
+  const [round, setRound] = useState(0);
+
+  useEffect(() => {
+    if (!on) return;
+    const stop = new AbortController();
+    const giveUp = setTimeout(() => stop.abort(), 7000);
+    for (const m of MACHINES) {
+      const began = performance.now();
+      fetch(m.href, { mode: "no-cors", cache: "no-store", signal: stop.signal })
+        .then(() => setSeen((s) => ({ ...s, [m.host]: { up: true, ms: Math.round(performance.now() - began) } })))
+        .catch(() => !stop.signal.aborted || performance.now() - began > 6900 ? setSeen((s) => ({ ...s, [m.host]: { up: false } })) : null);
+    }
+    return () => {
+      clearTimeout(giveUp);
+      stop.abort();
+    };
+  }, [on, round]);
+
+  const again = () => {
+    setSeen({});
+    setRound((n) => n + 1);
+  };
+  const up = MACHINES.filter((m) => seen[m.host]?.up).length;
+
+  return (
+    <div className={on ? "ts" : "ts is-off"}>
+      <div className="ts__top">
+        <img src="/icons/dock/tailscale.png" alt="" width="34" height="34" />
+        <p>
+          <b>{on ? "Connected" : "Disconnected"}</b>
+          <span>{on ? `${up} of ${MACHINES.length} machines answering` : "Not checking on anything"}</span>
+        </p>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          aria-label="Connected"
+          className="ts__switch"
+          onClick={() => {
+            setSeen({});
+            setOn((v) => !v);
+          }}
+        />
+      </div>
+      <p className="ts__label">My machines</p>
+      <ul className="ts__list">
+        {MACHINES.map((m) => {
+          const got = on ? seen[m.host] : null;
+          const state = !on ? "off" : !got ? "wait" : got.up ? "up" : "down";
+          return (
+            <li key={m.host}>
+              <a href={m.href} target="_blank" rel="noreferrer" data-state={state} data-umami-event={`tailscale-${m.host}`}>
+                <i aria-hidden="true" />
+                <span>
+                  <b>{m.name}</b>
+                  <small>{m.note ?? m.host}</small>
+                </span>
+                <em>{state === "up" ? `${got.ms} ms` : state === "down" ? "no answer" : state === "wait" ? "asking…" : "—"}</em>
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="ts__foot">
+        <span>Asked from your browser, just now.</span>
+        <button type="button" onClick={again} disabled={!on}>
+          Ask again
+        </button>
+      </p>
     </div>
   );
 }
@@ -877,9 +1134,78 @@ const APPS_CSS = `
 .sf__cards b{margin-top:8px;font-weight:600;}
 .sf__cards span{color:var(--muted);font-size:12px;}
 
+/* ---- FL Studio: its own dark grey in every theme. Steps come in fours, two shades, the way its rack does. ---- */
+.fl{display:flex;flex-direction:column;height:100%;background:#363d42;color:#d7dde1;font-size:12.5px;outline:none;}
+.fl__top{flex:none;display:flex;align-items:center;gap:10px;padding:9px 14px;background:#2c3338;border-bottom:1px solid #1f2428;}
+.fl__play{display:grid;place-items:center;width:34px;height:30px;padding:0;border:none;border-radius:6px;background:#4b545a;cursor:pointer;box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 1px 2px rgba(0,0,0,.4);}
+.fl__play svg{width:18px;height:18px;fill:#9ee37d;}
+.fl__play[aria-pressed="true"]{background:#f08a2c;}
+.fl__play[aria-pressed="true"] svg{fill:#1f2428;}
+.fl__tempo{display:flex;align-items:baseline;gap:5px;padding:4px 10px;border-radius:6px;background:#1f2428;box-shadow:inset 0 1px 2px rgba(0,0,0,.5);}
+.fl__tempo b{min-width:2.2em;font-family:var(--mono);font-size:15px;font-weight:500;color:#f6a04d;text-align:right;}
+.fl__tempo span{font-size:9.5px;letter-spacing:.06em;color:#8b959b;}
+.fl__tempo input{width:90px;margin:0 0 0 6px;align-self:center;accent-color:#f08a2c;}
+.fl__name{margin-right:auto;padding:4px 10px;border-radius:6px;background:#424a50;font-size:11.5px;color:#c3cace;}
+.fl__text{padding:4px 10px;border:none;border-radius:6px;background:none;cursor:pointer;font-size:11.5px;color:#9aa4aa;}
+.fl__text:hover{background:#424a50;color:#fff;}
+.fl__rack{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:6px;padding:12px 14px;}
+.fl__row{display:grid;grid-template-columns:12px 84px minmax(0,1fr);align-items:center;gap:8px;}
+.fl__led{width:12px;height:12px;padding:0;border:none;border-radius:50%;cursor:pointer;background:#232a2e;box-shadow:inset 0 1px 2px rgba(0,0,0,.6);}
+.fl__led[aria-pressed="true"]{background:#8fe36a;box-shadow:0 0 7px rgba(143,227,106,.75),inset 0 1px 0 rgba(255,255,255,.5);}
+.fl__chan{height:32px;padding:0 10px;border:none;border-radius:5px;cursor:pointer;text-align:left;font-size:12px;font-weight:500;color:#e6ebee;background:linear-gradient(#5d676d,#4b545a);box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 1px 2px rgba(0,0,0,.4);}
+.fl__chan:active{background:#434b50;}
+.fl__steps{display:grid;grid-template-columns:repeat(16,minmax(0,1fr));gap:3px;}
+.fl__steps button{height:32px;padding:0;border:none;border-radius:4px;cursor:pointer;background:#4c555b;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -2px 0 rgba(0,0,0,.25);}
+.fl__steps button:nth-child(8n+5),.fl__steps button:nth-child(8n+6),.fl__steps button:nth-child(8n+7),.fl__steps button:nth-child(8n+8){background:#5e4b4f;}
+.fl__steps button:nth-child(4n+1):not(:first-child){margin-left:4px;}
+.fl__steps button[aria-pressed="true"]{background:#e9eef1;box-shadow:0 0 8px rgba(233,238,241,.45),inset 0 -2px 0 rgba(0,0,0,.18);}
+.fl__steps button.is-now{outline:2px solid #f08a2c;outline-offset:1px;}
+.fl__row.is-muted :is(.fl__chan,.fl__steps){opacity:.4;}
+.fl :is(.fl__play,.fl__led,.fl__chan,.fl__text,.fl__steps button):focus-visible{outline:2px solid #f6a04d;outline-offset:2px;}
+
+/* ---- Tailscale: a short list of machines, each with a light ---- */
+.ts{display:flex;flex-direction:column;height:100%;font-size:13px;}
+.ts__top{flex:none;display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);}
+.ts__top img{display:block;margin:-3px;}
+.ts__top p{flex:1;min-width:0;margin:0;display:flex;flex-direction:column;line-height:1.3;}
+.ts__top b{font-size:14.5px;font-weight:600;}
+.ts__top span{font-size:11.5px;color:var(--muted);}
+.ts__switch{flex:none;position:relative;width:40px;height:24px;padding:0;border:none;border-radius:999px;cursor:pointer;background:color-mix(in srgb,var(--text) 22%,transparent);transition:background .2s var(--ease);}
+.ts__switch::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:translate .2s var(--ease);}
+.ts__switch[aria-checked="true"]{background:#34c759;}
+.ts__switch[aria-checked="true"]::after{translate:16px 0;}
+.ts__label{flex:none;margin:12px 16px 4px;font-size:11px;font-weight:600;color:var(--muted);}
+.stage .ts__list{flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin;list-style:none;margin:0;padding:0 8px;}
+.ts__list a{display:grid;grid-template-columns:10px minmax(0,1fr) auto;align-items:center;gap:10px;padding:8px;border-radius:8px;color:var(--text);text-decoration:none;}
+.ts__list a:hover{background:color-mix(in srgb,var(--text) 6%,transparent);}
+.ts__list i{width:9px;height:9px;border-radius:50%;background:color-mix(in srgb,var(--text) 25%,transparent);}
+.ts__list [data-state="up"] i{background:#34c759;box-shadow:0 0 0 3px rgba(52,199,89,.2);}
+.ts__list [data-state="down"] i{background:#ff3b30;}
+.ts__list [data-state="wait"] i{animation:tsWait .9s ease-in-out infinite alternate;}
+@keyframes tsWait{to{opacity:.25;}}
+.ts__list span{display:flex;flex-direction:column;min-width:0;line-height:1.3;}
+.ts__list b{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ts__list small{font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ts__list em{font-style:normal;font-size:11.5px;font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap;}
+.ts.is-off .ts__list a{opacity:.5;}
+.ts__foot{flex:none;margin:0;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 16px 12px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);}
+.ts__foot button{padding:4px 11px;border:1px solid var(--line);border-radius:6px;background:none;cursor:pointer;font-size:12px;}
+.ts__foot button:hover:not(:disabled){background:color-mix(in srgb,var(--text) 7%,transparent);}
+.ts__foot button:disabled{opacity:.4;cursor:default;}
+
 /* phones: one column each, the sidebars step out */
 @media (max-width:760px){
   .fd,.vs,.sl{grid-template-columns:minmax(0,1fr);}
+  /* the sequencer on a phone: the top row wraps and the drum names take less room, so all sixteen steps fit */
+  .fl__top{flex-wrap:wrap;}
+  .fl__name{display:none;}
+  .fl__text:first-of-type{margin-left:auto;}
+  .fl__rack{justify-content:flex-start;padding:16px 10px;gap:8px;}
+  .fl__row{grid-template-columns:12px 50px minmax(0,1fr);gap:6px;}
+  .fl__chan{padding:0 6px;font-size:11px;height:38px;}
+  .fl__steps{gap:2px;}
+  .fl__steps button{height:38px;}
+  .fl__steps button:nth-child(4n+1):not(:first-child){margin-left:2px;}
   .fd__side,.vs__side,.sl__side{display:none;}
   .fd__list :is(button,.fd__head){grid-template-columns:22px minmax(0,1fr) 96px;}
   .tm,.vs__edit{font-size:13px;}
@@ -898,6 +1224,8 @@ export default function MiniApp({ id, drive, finderAt, email, links, more, onOpe
       {id === "claude" && <ClaudeApp email={email} onOpen={onOpen} />}
       {id === "vscodium" && <EditorApp />}
       {id === "ghostty" && <TerminalApp drive={drive} onOpen={onOpen} onExit={onExit} readText={readText} />}
+      {id === "flstudio" && <SequencerApp />}
+      {id === "tailscale" && <TailscaleApp />}
     </>
   );
 }
