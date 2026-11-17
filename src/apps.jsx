@@ -1,11 +1,14 @@
 // The small apps on the laptop's dock (Finder, Safari, Slack, Claude, VSCodium, Ghostty, FL Studio, Tailscale)
 // and their styles. Each one is a toy that does one real thing; none of them talks to a server of mine. This file is only fetched when one of
 // them is first opened (or once the page has gone quiet), so it brings its own styles with it.
-import { useEffect, useReducer, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useReducer, useRef, useState } from "react";
 import { AppIcon, DriveArt, FolderArt, TextArt } from "./art";
 import { EXPERIENCE, GITHUB, PROJECTS } from "./data";
 import { nodeAt } from "./drive";
 import { store, stored } from "./storage";
+
+// The first-person game is bigger than everything else here, so it is fetched only when someone runs it.
+const BelowDeck = lazy(() => import("./belowdeck"));
 
 const KINDS = { folder: "Folder", app: "Application", link: "Web location", text: "Plain text", project: "Markdown", image: "Image", pdf: "PDF document" };
 
@@ -159,6 +162,7 @@ const HELP = `Things that work here:
   whoami          who you are
   neofetch        about this machine
   snake           a game: eat, grow, don't hit anything
+  belowdeck       a game: find the hatch, mind the rats
   echo, date, clear, exit`;
 
 /* ---- snake, run from Ghostty. The terminal hands it the whole screen, the way a real one does for a program
@@ -387,8 +391,13 @@ function TerminalApp({ drive, onOpen, onExit, readText }) {
       case "sudo":
         return "visitor is not in the sudoers file. This incident will be reported.";
       case "snake":
-        setGame(boardSize());
+        setGame({ kind: "snake", ...boardSize() });
         return "";
+      case "belowdeck":
+        setGame({ kind: "belowdeck" });
+        return "";
+      case "doom":
+        return "zsh: command not found: doom\nNo Doom on this laptop. Try belowdeck, a small one of my own.";
       case "neofetch":
         return `visitor@latesailor\n------------------\nOS: latesailor.dev, React on Vite\nHost: a laptop drawn in CSS\nShell: about twelve commands\nDisk: ${drive.name}, ${PROJECTS.length} projects\nUptime: since you opened the tab\nCode: ${GITHUB}`;
       case "ls": {
@@ -448,15 +457,22 @@ function TerminalApp({ drive, onOpen, onExit, readText }) {
     }
   };
 
+  const backToPrompt = (out) => {
+    setGame(null);
+    setLines((l) => [...l, { out }]);
+  };
+  if (game?.kind === "belowdeck")
+    return (
+      <Suspense fallback={<div className="tm"><pre>Loading belowdeck…</pre></div>}>
+        <BelowDeck onQuit={backToPrompt} />
+      </Suspense>
+    );
   if (game)
     return (
       <SnakeGame
         cols={game.cols}
         rows={game.rows}
-        onQuit={(score, best) => {
-          setGame(null);
-          setLines((l) => [...l, { out: `Score ${score}. Best ${best}.` }]);
-        }}
+        onQuit={(score, best) => backToPrompt(`Score ${score}. Best ${best}.`)}
       />
     );
 
