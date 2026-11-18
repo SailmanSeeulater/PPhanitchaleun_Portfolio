@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AI_USAGE, GITHUB, EXPERIENCE, PROJECTS, rich } from "./data";
+import { GITHUB, EXPERIENCE, PROJECTS, rich } from "./data";
+import TOKEN_USAGE from "./token-usage.json";
 import { ArrowIcon, DownloadIcon, ProjectNotes, RESUME, VisitorCount, useAnalytics } from "./shared";
 import { DOCK_CSS, SC_PROFILE, SoundDock } from "./sound";
 import { AppIcon, FolderArt, TextArt } from "./art";
@@ -60,7 +61,7 @@ const LINKS = [
   { id: "github", name: "GitHub", href: GITHUB, icon: "/icons/apps/github.svg" },
 ];
 // The apps on my own Mac's dock. Each opens a little window of its own that does one small thing. ("href" would
-// make one leave for a real site instead; none does at the moment.)
+// make one leave for a real site instead; none does at the moment. "icon" is for one not drawn as a .png.)
 const DOCK_EXTRAS = [
   { id: "safari", name: "Safari", app: true },
   { id: "slack", name: "Slack", app: true },
@@ -71,6 +72,7 @@ const DOCK_EXTRAS = [
   { id: "flstudio", name: "FL Studio", app: true },
   { id: "mordi", name: "Mordi", app: true },
   { id: "tailscale", name: "Tailscale", app: true },
+  { id: "docker", name: "Docker", app: true, icon: "/icons/dock/docker.svg" },
 ];
 // The little windows the dock's apps open, Finder's included.
 const MINI = [{ id: "finder", name: "Finder" }, ...DOCK_EXTRAS.filter((x) => x.app)];
@@ -92,7 +94,9 @@ const FILES = [
 ];
 // The note that greets a first-time visitor. It opens from the boat in the menu bar, too.
 const WELCOME = { id: "welcome", name: "Welcome" };
-const WINDOWS = [...APPS, ...FILES, ...MINI, WELCOME];
+// The table behind the tokens widget.
+const TOKENS = { id: "tokens", name: "Tokens burnt" };
+const WINDOWS = [...APPS, ...FILES, ...MINI, WELCOME, TOKENS];
 
 // Listed under the jobs on the Experience timeline.
 const EDUCATION = {
@@ -633,30 +637,92 @@ function CalendarWidget() {
   );
 }
 
-/* ---- Tokens widget: how much Claude Code has been burnt building all this, as dots you could count: one for
-   every hundred million tokens, the last one faded by however much of it is used. The numbers come from
-   src/ai-usage.json, which "npm run usage" refreshes. ---- */
+/* ---- Tokens widget: how much Claude Code has been burnt building all this, on both my machines together, as dots
+   you could count, the last one faded by however much of it is used. Clicking it opens the table it adds up.
+   The numbers are in src/token-usage.json, copied in by hand from each machine's usage report. ---- */
 const compact = (n) => new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 }).format(n);
 const inWords = (n) => new Intl.NumberFormat("en-US", { notation: "compact", compactDisplay: "long" }).format(n);
-const monthOf = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString("en-US", { month: "short", year: "numeric" });
+const full = (n) => n.toLocaleString("en-US");
 // What one dot stands for. It steps up once there would be more than seven rows of ten, so the dots always fit.
 const DOT_SIZES = [1e8, 2e8, 5e8, 1e9, 2e9, 5e9, 1e10];
+const TOKEN_COLUMNS = [
+  ["input", "Input"],
+  ["output", "Output"],
+  ["cacheWrite", "Cache write"],
+  ["cacheRead", "Cache read"],
+  ["total", "Total"],
+];
+// Each column added up across the machines.
+const TOKENS_ALL = Object.fromEntries(TOKEN_COLUMNS.map(([key]) => [key, TOKEN_USAGE.machines.reduce((sum, m) => sum + m[key], 0)]));
 
-function TokensWidget() {
-  const total = AI_USAGE.tokens.total;
+function TokensWidget({ onOpen }) {
+  const total = TOKENS_ALL.total;
   const each = DOT_SIZES.find((size) => total / size <= 70) ?? DOT_SIZES[DOT_SIZES.length - 1];
   const dots = total / each;
   return (
-    <div className="wg wg--tokens" role="img" aria-label={`${compact(total)} Claude Code tokens burnt since ${monthOf(AI_USAGE.since)}, over ${compact(AI_USAGE.replies)} replies`}>
-      <div className="wg__dots">
+    <button type="button" className="wg wg--tokens" data-app="tokens" onClick={onOpen} aria-label={`${compact(total)} Claude Code tokens burnt across ${TOKEN_USAGE.machines.length} machines. Show the table`}>
+      <span className="wg__dots" aria-hidden="true">
         {Array.from({ length: Math.ceil(dots) }, (_, i) => (
           <i key={i} style={i + 1 > dots ? { opacity: dots - i } : undefined} />
         ))}
-      </div>
+      </span>
       <p>
         <b>{compact(total)}</b> tokens burnt
       </p>
       <span>each dot is {inWords(each)}</span>
+    </button>
+  );
+}
+
+// The window the widget opens: the table, one row a machine, and the two added up.
+function TokensApp() {
+  const asOf = new Date(`${TOKEN_USAGE.asOf}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return (
+    <div className="tk">
+      <header className="tk__head">
+        <p>
+          <b>{full(TOKENS_ALL.total)}</b>
+          <span>Claude Code tokens, both machines together</span>
+        </p>
+        <i aria-hidden="true" />
+      </header>
+      <div className="tk__scroll">
+        <table className="tk__table">
+          <thead>
+            <tr>
+              <th scope="col">Machine</th>
+              {TOKEN_COLUMNS.map(([key, label]) => (
+                <th key={key} scope="col">
+                  {label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {TOKEN_USAGE.machines.map((m) => (
+              <tr key={m.name}>
+                <th scope="row">{m.name}</th>
+                {TOKEN_COLUMNS.map(([key, label]) => (
+                  <td key={key} data-label={label}>
+                    {full(m[key])}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th scope="row">Combined</th>
+              {TOKEN_COLUMNS.map(([key, label]) => (
+                <td key={key} data-label={label}>
+                  {full(TOKENS_ALL[key])}
+                </td>
+              ))}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <p className="tk__foot">From each machine&apos;s usage report, as of {asOf}.</p>
     </div>
   );
 }
@@ -1039,7 +1105,7 @@ export default function Stage() {
   // on a phone, where a window fills the whole page), because a window doesn't fill the screen.
   const originOf = (id) => {
     const screen = screenRef.current;
-    const tile = screen?.querySelector(`[data-app="${id}"] :is(.dk__tile,.da__tile,.fi__art,.mb__boat)`);
+    const tile = screen?.querySelector(`[data-app="${id}"] :is(.dk__tile,.da__tile,.fi__art,.mb__boat,.wg__dots)`);
     if (!tile) return null;
     const s = window.matchMedia("(max-width:760px)").matches ? { left: 0, top: 0 } : screen.getBoundingClientRect();
     const t = tile.getBoundingClientRect();
@@ -1316,6 +1382,8 @@ export default function Stage() {
         return <BoatFolder />;
       case "sailor":
         return <SailorText />;
+      case "tokens":
+        return <TokensApp />;
       case "welcome":
         return (
           <WelcomeApp
@@ -1428,7 +1496,7 @@ export default function Stage() {
                 <div className="desk__widgets">
                   <ClockWidget />
                   <CalendarWidget />
-                  <TokensWidget />
+                  <TokensWidget onOpen={() => openWin("tokens")} />
                 </div>
                 <ul className="desk__files" aria-label="On the desktop">
                   {FILES.map((f) => (
@@ -1475,7 +1543,7 @@ export default function Stage() {
                     {DOCK_EXTRAS.map((x) => {
                       const face = (
                         <>
-                          <img className="dk__tile" src={`/icons/dock/${x.id}.png`} alt="" width="96" height="96" />
+                          <img className="dk__tile" src={x.icon ?? `/icons/dock/${x.id}.png`} alt="" width="96" height="96" />
                           <b>{x.name}</b>
                         </>
                       );
@@ -1833,6 +1901,11 @@ const STAGE_CSS = `
 }
 .wg__dots{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:calc(var(--wg) * .023);}
 .wg__dots i{aspect-ratio:1;border-radius:50%;background:#d97757;}
+/* it opens the table, so it's a button: no button look, a little lift on hover */
+/* (.stage button hands every button the font around it, so the card's own size is set again here) */
+.stage button.wg--tokens{border:none;color:var(--text);font-size:calc(var(--wg) * .068);line-height:1.3;text-align:left;cursor:pointer;transition:background-color .2s var(--ease);}
+/* no growing on hover: a card that grows slips in and out from under the pointer at its edge, and shakes */
+.stage button.wg--tokens:hover{background:color-mix(in srgb,var(--bg) 96%,transparent);}
 .wg--tokens p{margin:auto 0 0;font-size:1.02em;font-weight:500;white-space:nowrap;}
 /* the total is set in the same type as the clock's numerals and the calendar, only heavier */
 .wg--tokens b{font-size:1.6em;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;}
@@ -2067,11 +2140,24 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
 .app__min::after{content:"−";}
 .app__max::after{content:"+";}
 .app[data-front] .app__bar:hover :is(.app__close,.app__min,.app__max)::after{opacity:1;}
+/* the lights and their marks are kept on layers of their own from the start. Otherwise the browser makes those
+   layers each time a light grows or a mark fades in, and drops them after, and every time it does, the text of
+   the window around them is redrawn a pixel aside: hovering the bar made a window's text shiver. */
+:is(.app__close,.app__min,.app__max){will-change:scale;}
+:is(.app__close,.app__min,.app__max)::after{will-change:opacity;}
 /* the dock's small apps fill their window edge to edge; a few keep their own colours in every theme */
 .app .app__body--flush{padding:0;overflow:hidden;}
 .app .app__body--flush > *{height:100%;min-height:0;}
 .app:is([data-id="ghostty"],[data-id="welcome"]){--win-l:clamp(28px,calc(var(--sw) * .2),260px);--win-t:calc(var(--mb) + clamp(14px,calc(var(--sw) * .06),80px));}
 .app[data-id="ghostty"] .app__bar{background:#1d1e26;border-color:#0e0f13;}
+/* while a game is running in it, Ghostty grows to the size the five sections open at, with its drag undone. On a
+   phone every window already fills the screen. */
+@media (min-width:761px){
+  .stage .app[data-id="ghostty"]:not([data-max]):has(.tm--game,.bd){
+    --win-t:calc(var(--mb) + clamp(6px,.8vw,12px));--win-l:clamp(14px,3.2vw,60px);
+    inset:var(--win-t) var(--win-l) calc(var(--desk-pad) + var(--ic) * 1.34 + 18px);translate:none;
+  }
+}
 .app[data-id="vscodium"] .app__bar{background:#181818;border-color:#2b2b2b;}
 .app[data-id="obsidian"] .app__bar{background:#262626;border-color:#363636;}
 .app[data-id="flstudio"] .app__bar{background:#262c30;border-color:#1f2428;}
@@ -2279,7 +2365,7 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
 .app[data-id="contact"]{--win-w:460px;--win-h:300px;}
 /* a few windows are a fixed, small size and sit in the middle of the screen, a little above centre: the business
    card here, and the sequencer and the machines list from the dock. --win-w and --win-h say how big. */
-.app:is([data-id="contact"],[data-id="flstudio"],[data-id="tailscale"],[data-id="mordi"]){
+.app:is([data-id="contact"],[data-id="flstudio"],[data-id="tailscale"],[data-id="mordi"],[data-id="tokens"]){
   --win-l:max(16px,calc((var(--sw) - 22px - var(--win-w)) / 2));
   --win-t:max(calc(var(--mb) + 10px),calc((var(--sw) / 1.56 - 22px - var(--win-h)) / 2 - var(--ic) * .5));
   inset:var(--win-t) auto auto var(--win-l);width:min(var(--win-w),calc(100% - 32px));height:var(--win-h);
@@ -2288,6 +2374,44 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
 .app[data-id="flstudio"]{--win-w:700px;--win-h:288px;}
 .app[data-id="tailscale"]{--win-w:340px;--win-h:420px;}
 .app[data-id="mordi"]{--win-w:336px;--win-h:540px;}
+.app[data-id="tokens"]{--win-w:680px;--win-h:290px;}
+.app[data-id="tokens"] .app__body{padding:0;overflow:hidden;}
+/* the tokens table, printed on paper: warm off-white with a faint grain in every theme, like a sheet from a
+   good printer, dotted rules between the lines, the total in the same type as the columns */
+.app[data-id="tokens"]{--paper:#fbf8f1;--ink:#2d2822;--ink-soft:#8b8072;--rule:rgba(70,52,30,.22);background:var(--paper);color:var(--ink);}
+.app[data-id="tokens"] .app__bar{background:#f4efe5;border-color:rgba(70,52,30,.14);}
+.app[data-id="tokens"] .app__bar p{color:var(--ink);}
+.tk{display:flex;flex-direction:column;height:100%;font-size:12.5px;color:var(--ink);background-color:var(--paper);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .32 0 0 0 0 .25 0 0 0 0 .16 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.7);}
+.tk__head{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px 12px;}
+.tk__head p{margin:0;display:flex;flex-direction:column;line-height:1.2;}
+.tk__head b{font-family:var(--mono);font-size:22px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;}
+.tk__head span{margin-top:2px;font-size:11.5px;color:var(--ink-soft);}
+.tk__head i{flex:none;width:12px;height:12px;border-radius:50%;background:#d97757;box-shadow:0 0 0 4px rgba(217,119,87,.18);}
+.tk__scroll{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;padding:0 20px;}
+.tk__table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.tk__table :is(th,td){padding:7px 0 7px 18px;text-align:right;border-bottom:1px dotted var(--rule);}
+.tk__table :is(th,td):first-child{padding-left:0;text-align:left;}
+.tk__table thead th{font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-soft);border-bottom:1px solid var(--rule);}
+.tk__table tbody th{font-weight:500;}
+.tk__table td{font-family:var(--mono);font-size:11.5px;}
+.tk__table tfoot :is(th,td){border-top:1px solid var(--ink);border-bottom:none;font-weight:700;}
+.tk__table tfoot td:last-child{color:#c15f3c;}
+.tk__foot{flex:none;margin:0;padding:10px 20px 12px;border-top:1px dashed var(--rule);font-size:11px;font-style:italic;color:var(--ink-soft);}
+/* too narrow for six columns: each machine becomes a little card, every number labelled */
+@media (max-width:760px){
+  .tk__table,.tk__table :is(tbody,tfoot,tr,th,td){display:block;}
+  .tk__table thead{display:none;}
+  .tk__table tr{padding:10px 0;border-bottom:1px dotted var(--rule);}
+  .tk__table tfoot tr{border-bottom:none;}
+  .tk__table tfoot :is(th,td){border-top:none;}
+  .tk__table tfoot tr{border-top:1px solid var(--ink);}
+  .tk__table :is(th,td){padding:3px 0;border-bottom:none;}
+  .tk__table tr > th{padding-bottom:5px;font-size:13.5px;}
+  .tk__table td{display:flex;justify-content:space-between;gap:12px;padding-left:0;}
+  .tk__table td::before{content:attr(data-label);font-family:var(--font-body);font-size:12px;color:var(--ink-soft);}
+}
 .app[data-id="contact"] .app__body{padding:0;overflow:hidden;}
 .bc{position:relative;display:flex;flex-direction:column;justify-content:space-between;height:100%;padding:28px 30px 26px;}
 .bc__boat{position:absolute;top:26px;right:28px;width:30px;height:30px;fill:currentColor;}

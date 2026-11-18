@@ -1,4 +1,4 @@
-// The small apps on the laptop's dock (Finder, Safari, Slack, Claude, VSCodium, Ghostty, FL Studio, Tailscale)
+// The small apps on the laptop's dock (Finder, Safari, Slack, Claude, VSCodium, Ghostty, FL Studio, Tailscale, Docker)
 // and their styles. Each one is a toy that does one real thing; none of them talks to a server of mine. This file is only fetched when one of
 // them is first opened (or once the page has gone quiet), so it brings its own styles with it.
 import { Suspense, lazy, useEffect, useReducer, useRef, useState } from "react";
@@ -185,7 +185,11 @@ function snakeStart({ cols, rows, best }) {
 function snakeStep(g, action) {
   switch (action.type) {
     case "restart":
-      return snakeStart(g);
+      return snakeStart({ ...g, ...action.size });
+    case "resize":
+      // Only before the first move: the board never changes under a snake that is moving.
+      if (g.phase !== "ready" || (action.size.cols === g.cols && action.size.rows === g.rows)) return g;
+      return snakeStart({ ...g, ...action.size });
     case "pause":
       return g.phase === "play" ? { ...g, phase: "paused" } : g.phase === "paused" ? { ...g, phase: "play" } : g;
     case "pause-if-playing":
@@ -218,16 +222,39 @@ function snakeStep(g, action) {
   }
 }
 
-function SnakeGame({ cols, rows, onQuit }) {
-  const [g, dispatch] = useReducer(snakeStep, { cols, rows, best: Number(stored("stage-snake")) || 0 }, snakeStart);
+// The biggest board that fits a box, measured in characters of the terminal's own type. A cell is two characters
+// wide and as tall as that is wide; around the board go its border, a line above and a line below.
+function boardFor(box) {
+  // Laid-out sizes, not sizes on screen: a window that is still growing out of its icon is drawn smaller than
+  // it really is.
+  const probe = document.createElement("span");
+  probe.style.cssText = "position:absolute;visibility:hidden;width:100ch;";
+  box.append(probe);
+  const cell = (probe.offsetWidth / 100 || 7.5) * 2;
+  probe.remove();
+  const fit = (n, low, high) => Math.min(high, Math.max(low, Math.floor(n)));
+  return { cols: fit((box.clientWidth - 28) / cell - 1, 8, 36), rows: fit((box.clientHeight - 72) / cell - 2, 6, 22) };
+}
+
+function SnakeGame({ onQuit }) {
+  const [g, dispatch] = useReducer(snakeStep, { cols: 16, rows: 8, best: Number(stored("stage-snake")) || 0 }, snakeStart);
   const boxRef = useRef(null);
+  const size = useRef(null);
   const drag = useRef(null);
   const [touch] = useState(() => !!window.matchMedia?.("(pointer:coarse)").matches);
   // It gets a little quicker with every bite.
   const pace = Math.max(70, 135 - g.score * 3);
 
   useEffect(() => {
-    boxRef.current?.focus({ preventScroll: true });
+    const box = boxRef.current;
+    box.focus({ preventScroll: true });
+    // The window grows while a game is on, so the board is fitted again until the first move.
+    const watch = new ResizeObserver(() => {
+      size.current = boardFor(box);
+      dispatch({ type: "resize", size: size.current });
+    });
+    watch.observe(box);
+    return () => watch.disconnect();
   }, []);
   useEffect(() => {
     if (g.phase !== "play") return undefined;
@@ -251,7 +278,7 @@ function SnakeGame({ cols, rows, onQuit }) {
     const dir = SNAKE_TURNS[key];
     if (dir) dispatch({ type: "turn", dir });
     else if (key === "p" || key === " ") dispatch({ type: "pause" });
-    else if (key === "r" || (key === "Enter" && g.phase === "over")) dispatch({ type: "restart" });
+    else if (key === "r" || (key === "Enter" && g.phase === "over")) dispatch({ type: "restart", size: size.current });
     else if (key === "q" || key === "Escape") quit();
     else return;
     // The desktop behind listens for arrows and Escape too. These ones are the game's.
@@ -287,7 +314,7 @@ function SnakeGame({ cols, rows, onQuit }) {
       <p className="tm__score">
         snake <span>score {g.score}</span> <span>best {Math.max(g.best, g.score)}</span>
         {g.phase === "over" ? (
-          <button type="button" onClick={() => dispatch({ type: "restart" })}>[r] again</button>
+          <button type="button" onClick={() => dispatch({ type: "restart", size: size.current })}>[r] again</button>
         ) : (
           <button type="button" onClick={() => dispatch({ type: "pause" })}>[p] {g.phase === "paused" ? "resume" : "pause"}</button>
         )}
@@ -310,7 +337,7 @@ function TerminalApp({ drive, onOpen, onExit, readText }) {
   const [lines, setLines] = useState([{ out: "Last login: just now, on a laptop inside a website.\nType help to see what works." }]);
   const [cwd, setCwd] = useState([]);
   const [input, setInput] = useState("");
-  // While snake is running: how big a board fits this window.
+  // The game running in place of the prompt, if any.
   const [game, setGame] = useState(null);
   const past = useRef({ list: [], at: 0 });
   const inputRef = useRef(null);
@@ -325,22 +352,6 @@ function TerminalApp({ drive, onOpen, onExit, readText }) {
   useEffect(() => {
     boxRef.current?.scrollTo(0, boxRef.current.scrollHeight);
   }, [lines, game]);
-
-  // The biggest board that fits the window as it is now, measured in characters of the terminal's own type.
-  const boardSize = () => {
-    const box = boxRef.current;
-    // Laid-out width, not the size on screen: a window that is still growing out of its icon is drawn smaller
-    // than it really is.
-    const probe = document.createElement("span");
-    probe.style.cssText = "position:absolute;visibility:hidden;width:100ch;";
-    box.append(probe);
-    const cell = (probe.offsetWidth / 100 || 7.5) * 2;
-    probe.remove();
-    const fit = (n, low, high) => Math.min(high, Math.max(low, Math.floor(n)));
-    // A cell is two characters wide and as tall as that is wide. Around the board go its border, a line above
-    // and a line below.
-    return { cols: fit((box.clientWidth - 28) / cell - 1, 8, 30), rows: fit((box.clientHeight - 72) / cell - 2, 6, 18) };
-  };
 
   // Follows a typed path from where you are. Names match without regard to capitals.
   const resolve = (arg) => {
@@ -391,7 +402,7 @@ function TerminalApp({ drive, onOpen, onExit, readText }) {
       case "sudo":
         return "visitor is not in the sudoers file. This incident will be reported.";
       case "snake":
-        setGame({ kind: "snake", ...boardSize() });
+        setGame({ kind: "snake" });
         return "";
       case "belowdeck":
         setGame({ kind: "belowdeck" });
@@ -470,8 +481,6 @@ function TerminalApp({ drive, onOpen, onExit, readText }) {
   if (game)
     return (
       <SnakeGame
-        cols={game.cols}
-        rows={game.rows}
         onQuit={(score, best) => backToPrompt(`Score ${score}. Best ${best}.`)}
       />
     );
@@ -1078,9 +1087,9 @@ const MACHINES = [
   ...PROJECTS.filter((p) => p.live).map((p) => ({ name: p.name, href: p.live })),
 ].map((m) => ({ ...m, host: new URL(m.href).host }));
 
-function TailscaleApp() {
-  const [on, setOn] = useState(true);
-  // What each machine said the last time it was asked: nothing yet, an answer and how long it took, or silence.
+// Asks each site in a list for its front page and times the answer. Gives back what each said the last time it
+// was asked (nothing yet, an answer and how long it took, or silence), keyed by host. Tailscale and Docker use it.
+function useAnswers(list, on = true) {
   const [seen, setSeen] = useState({});
   const [round, setRound] = useState(0);
 
@@ -1088,7 +1097,7 @@ function TailscaleApp() {
     if (!on) return;
     const stop = new AbortController();
     const giveUp = setTimeout(() => stop.abort(), 7000);
-    for (const m of MACHINES) {
+    for (const m of list) {
       const began = performance.now();
       fetch(m.href, { mode: "no-cors", cache: "no-store", signal: stop.signal })
         .then(() => setSeen((s) => ({ ...s, [m.host]: { up: true, ms: Math.round(performance.now() - began) } })))
@@ -1098,12 +1107,18 @@ function TailscaleApp() {
       clearTimeout(giveUp);
       stop.abort();
     };
-  }, [on, round]);
+  }, [list, on, round]);
 
   const again = () => {
     setSeen({});
     setRound((n) => n + 1);
   };
+  return { seen, again, forget: () => setSeen({}) };
+}
+
+function TailscaleApp() {
+  const [on, setOn] = useState(true);
+  const { seen, again, forget } = useAnswers(MACHINES, on);
   const up = MACHINES.filter((m) => seen[m.host]?.up).length;
 
   return (
@@ -1121,7 +1136,7 @@ function TailscaleApp() {
           aria-label="Connected"
           className="ts__switch"
           onClick={() => {
-            setSeen({});
+            forget();
             setOn((v) => !v);
           }}
         />
@@ -1151,6 +1166,139 @@ function TailscaleApp() {
           Ask again
         </button>
       </p>
+    </div>
+  );
+}
+
+/* ---- Docker Desktop: my apps as containers. One that is live somewhere shows as up or not by the same asking
+   Tailscale does; one that isn't deployed shows as exited. Images lists what each is built from. ---- */
+const kebab = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const CONTAINERS = [
+  { name: "latesailor", note: "this site", href: "https://latesailor.dev/", stack: ["React", "Vite", "Go", "SQLite", "nginx"] },
+  ...PROJECTS.filter((p) => p.live || p.stack.includes("Docker")).map((p) => ({ name: kebab(p.name), href: p.live ?? null, repo: p.repo, stack: p.stack })),
+]
+  .map((c) => ({ ...c, image: `${c.name}:latest`, host: c.href ? new URL(c.href).host : null }))
+  // Deployed ones first, the way running containers sit above stopped ones.
+  .sort((a, b) => !a.host - !b.host);
+const DEPLOYED = CONTAINERS.filter((c) => c.host);
+
+const DockerGlyph = {
+  containers: <path d="M4 7.5 12 3.5l8 4v9l-8 4-8-4zM4 7.5l8 4 8-4M12 11.5v9" />,
+  images: <path d="M4.5 5h15v14h-15zM4.5 15l4.5-4.5 4 4 2.5-2.5 4 4M15 9.5h.01" />,
+  open: <path d="M10 5H5.5v13.5H19V14M13.5 4.5H19.5V10.5M19 5l-8 8" />,
+  code: <path d="M9 7.5 4.5 12 9 16.5M15 7.5l4.5 4.5-4.5 4.5" />,
+};
+const Glyph = ({ d }) => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {d}
+  </svg>
+);
+
+function DockerApp() {
+  const [view, setView] = useState("containers");
+  const [query, setQuery] = useState("");
+  const { seen, again } = useAnswers(DEPLOYED);
+  const up = DEPLOYED.filter((c) => seen[c.host]?.up).length;
+  const q = query.trim().toLowerCase();
+  const shown = CONTAINERS.filter((c) => !q || `${c.name} ${c.image} ${c.host ?? ""} ${c.stack.join(" ")}`.toLowerCase().includes(q));
+
+  return (
+    <div className="dd">
+      <nav className="dd__side" aria-label="Docker Desktop">
+        {["containers", "images"].map((v) => (
+          <button key={v} type="button" aria-current={view === v ? "page" : undefined} onClick={() => setView(v)}>
+            <Glyph d={DockerGlyph[v]} />
+            {v === "containers" ? "Containers" : "Images"}
+          </button>
+        ))}
+        <p className="dd__engine">
+          <i aria-hidden="true" />
+          Asked from your browser
+        </p>
+      </nav>
+      <div className="dd__main">
+        <header className="dd__head">
+          <div>
+            <h3>{view === "containers" ? "Containers" : "Images"}</h3>
+            <p>{view === "containers" ? `${up} of ${DEPLOYED.length} running · ${CONTAINERS.length - DEPLOYED.length} not deployed` : `${CONTAINERS.length} images, one for each app`}</p>
+          </div>
+          {view === "containers" && (
+            <button type="button" className="dd__again" onClick={again}>
+              Check again
+            </button>
+          )}
+        </header>
+        <input className="dd__search" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" aria-label={`Search ${view}`} />
+        {view === "containers" ? (
+          <ul className="dd__rows">
+            <li className="dd__row dd__row--head" aria-hidden="true">
+              <span />
+              <span>Name</span>
+              <span>Status</span>
+              <span>Address</span>
+              <span>Actions</span>
+            </li>
+            {shown.map((c) => {
+              const got = c.host ? seen[c.host] : null;
+              const state = !c.host ? "exited" : !got ? "wait" : got.up ? "up" : "down";
+              return (
+                <li key={c.name} className="dd__row" data-state={state}>
+                  <i aria-hidden="true" />
+                  <span className="dd__name">
+                    <b>{c.name}</b>
+                    <small>{c.image}</small>
+                  </span>
+                  <span className="dd__status">{state === "up" ? `Running · ${got.ms} ms` : state === "down" ? "No answer" : state === "wait" ? "Starting…" : "Exited"}</span>
+                  <span className="dd__addr">
+                    {c.host ? (
+                      <a href={c.href} target="_blank" rel="noreferrer" data-umami-event={`docker-${c.name}`}>
+                        {c.note ?? c.host}
+                      </a>
+                    ) : (
+                      "Not deployed"
+                    )}
+                  </span>
+                  <span className="dd__acts">
+                    {c.href && (
+                      <a href={c.href} target="_blank" rel="noreferrer" aria-label={`Open ${c.name}`} title="Open">
+                        <Glyph d={DockerGlyph.open} />
+                      </a>
+                    )}
+                    {c.repo && (
+                      <a href={c.repo} target="_blank" rel="noreferrer" aria-label={`Code for ${c.name}`} title="Code" data-umami-event={`docker-code-${c.name}`}>
+                        <Glyph d={DockerGlyph.code} />
+                      </a>
+                    )}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <ul className="dd__rows">
+            <li className="dd__row dd__row--head dd__row--img" aria-hidden="true">
+              <span>Name</span>
+              <span>Tag</span>
+              <span>Built with</span>
+            </li>
+            {shown.map((c) => (
+              <li key={c.name} className="dd__row dd__row--img">
+                <span className="dd__name">
+                  <b>{c.name}</b>
+                </span>
+                <span className="dd__tag">latest</span>
+                <span className="dd__stack">
+                  {c.stack.slice(0, 4).map((t) => (
+                    <em key={t}>{t}</em>
+                  ))}
+                  {c.stack.length > 4 && <em>+{c.stack.length - 4}</em>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {!shown.length && <p className="dd__none">Nothing matches “{query.trim()}”.</p>}
+      </div>
     </div>
   );
 }
@@ -1397,6 +1545,61 @@ const APPS_CSS = `
 .ts__foot button:hover:not(:disabled){background:color-mix(in srgb,var(--text) 7%,transparent);}
 .ts__foot button:disabled{opacity:.4;cursor:default;}
 
+/* ---- Docker Desktop: a side bar, and a table of containers or images ---- */
+.dd{--dd-blue:#1d63ed;display:grid;grid-template-columns:clamp(132px,18%,180px) minmax(0,1fr);height:100%;font-size:13px;}
+.dd__side{display:flex;flex-direction:column;gap:2px;padding:12px 8px;border-right:1px solid var(--line);background:color-mix(in srgb,var(--text) 3%,transparent);}
+.dd__side button{display:flex;align-items:center;gap:9px;padding:7px 10px;border:none;border-radius:7px;background:none;color:var(--text);font:inherit;text-align:left;cursor:pointer;}
+.dd__side button:hover{background:color-mix(in srgb,var(--text) 7%,transparent);}
+.dd__side button[aria-current]{background:color-mix(in srgb,var(--dd-blue) 14%,transparent);color:var(--dd-blue);font-weight:600;}
+.dd__engine{display:flex;align-items:center;gap:7px;margin:auto 6px 0;font-size:11px;color:var(--muted);}
+.dd__engine i{width:7px;height:7px;border-radius:50%;background:#34c759;}
+.dd__main{display:flex;flex-direction:column;min-width:0;min-height:0;padding:16px 18px 0;}
+.dd__head{flex:none;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
+.dd__head h3{margin:0;font-size:17px;font-weight:650;}
+.dd__head p{margin:2px 0 0;font-size:11.5px;color:var(--muted);}
+.dd__again{flex:none;padding:6px 12px;border:none;border-radius:7px;background:var(--dd-blue);color:#fff;font:inherit;font-size:12px;font-weight:600;cursor:pointer;}
+.dd__again:hover{filter:brightness(1.1);}
+.dd__search{flex:none;margin:12px 0 8px;width:min(260px,100%);padding:6px 10px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--text);font:inherit;font-size:12.5px;outline:none;}
+.dd__search:focus{border-color:var(--dd-blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--dd-blue) 22%,transparent);}
+.stage .dd__rows{flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin;list-style:none;margin:0 -18px;padding:0 18px 12px;}
+.dd__row{display:grid;grid-template-columns:10px minmax(0,1.3fr) minmax(0,1fr) minmax(0,1.2fr) 56px;align-items:center;gap:12px;padding:9px 6px;border-bottom:1px solid var(--line);}
+.dd__row--img{grid-template-columns:minmax(0,1fr) 60px minmax(0,2fr);}
+.dd__row--head{padding-block:6px;font-size:11px;font-weight:600;color:var(--muted);}
+.dd__row > i{width:9px;height:9px;border-radius:50%;background:color-mix(in srgb,var(--text) 25%,transparent);}
+.dd__row[data-state="up"] > i{background:#34c759;box-shadow:0 0 0 3px rgba(52,199,89,.2);}
+.dd__row[data-state="down"] > i{background:#ff3b30;}
+.dd__row[data-state="wait"] > i{animation:tsWait .9s ease-in-out infinite alternate;}
+.dd__name{display:flex;flex-direction:column;min-width:0;line-height:1.3;}
+.dd__name b{font-weight:550;color:var(--dd-blue);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.dd__name small,.dd__tag{font-family:var(--mono);font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.dd__status{font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.dd__row[data-state="exited"] .dd__status,.dd__row[data-state="exited"] .dd__addr{color:var(--muted);}
+.dd__addr{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.dd__addr a{color:var(--dd-blue);text-decoration:none;}
+.dd__addr a:hover{text-decoration:underline;}
+.dd__acts{display:flex;justify-content:flex-end;gap:2px;}
+.dd__acts a{display:grid;place-items:center;width:26px;height:26px;border-radius:6px;color:var(--muted);}
+.dd__acts a:hover{background:color-mix(in srgb,var(--text) 8%,transparent);color:var(--text);}
+.dd__stack{display:flex;flex-wrap:wrap;gap:4px;min-width:0;}
+.dd__stack em{padding:1px 7px;border-radius:999px;background:color-mix(in srgb,var(--text) 7%,transparent);font-style:normal;font-size:11px;white-space:nowrap;}
+.dd__none{margin:14px 0;font-size:12.5px;color:var(--muted);}
+.dd :is(button,a,input):focus-visible{outline:2px solid var(--dd-blue);outline-offset:2px;}
+/* on a narrow window the side bar becomes two tabs along the top, and each row folds onto two lines */
+@media (max-width:760px){
+  .dd{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);}
+  .dd__side{flex-direction:row;padding:8px;border-right:none;border-bottom:1px solid var(--line);}
+  .dd__engine{margin:0 4px 0 auto;}
+  .dd__main{padding:12px 14px 0;}
+  .stage .dd__rows{margin:0 -14px;padding:0 14px 12px;}
+  .dd__row{grid-template-columns:10px minmax(0,1fr) auto;row-gap:2px;}
+  .dd__row--head{display:none;}
+  .dd__status{grid-column:2;grid-row:2;color:var(--muted);}
+  .dd__addr{grid-column:2;grid-row:3;}
+  .dd__acts{grid-column:3;grid-row:1 / 4;}
+  .dd__row--img{grid-template-columns:minmax(0,1fr) auto;}
+  .dd__row--img .dd__stack{grid-column:1 / -1;}
+}
+
 /* phones: one column each, the sidebars step out */
 @media (max-width:760px){
   .fd,.vs,.sl{grid-template-columns:minmax(0,1fr);}
@@ -1430,6 +1633,7 @@ export default function MiniApp({ id, drive, finderAt, email, links, more, onOpe
       {id === "ghostty" && <TerminalApp drive={drive} onOpen={onOpen} onExit={onExit} readText={readText} />}
       {id === "flstudio" && <SequencerApp />}
       {id === "tailscale" && <TailscaleApp />}
+      {id === "docker" && <DockerApp />}
     </>
   );
 }

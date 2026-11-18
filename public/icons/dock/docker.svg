@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a7bff"/>
+      <stop offset="1" stop-color="#1650d6"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2.5" stdDeviation="3" flood-color="#000" flood-opacity=".28"/>
+    </filter>
+  </defs>
+  <rect x="16" y="14" width="160" height="160" rx="36" fill="url(#bg)" filter="url(#shadow)"/>
+  <g fill="#fff">
+    <!-- the cargo: three rows of crates -->
+    <rect x="94" y="49" width="14" height="13" rx="2"/>
+    <rect x="62" y="65" width="14" height="13" rx="2"/>
+    <rect x="78" y="65" width="14" height="13" rx="2"/>
+    <rect x="94" y="65" width="14" height="13" rx="2"/>
+    <rect x="46" y="81" width="14" height="13" rx="2"/>
+    <rect x="62" y="81" width="14" height="13" rx="2"/>
+    <rect x="78" y="81" width="14" height="13" rx="2"/>
+    <rect x="94" y="81" width="14" height="13" rx="2"/>
+    <rect x="110" y="81" width="14" height="13" rx="2"/>
+    <!-- the whale carrying them, tail raised on the right -->
+    <path d="M36 98h97c3-9 11-14 19-12 4 1 6 3 7 5-4 1-8 3-10 7-5 27-30 46-63 46-31 0-48-20-50-46z"/>
+  </g>
+  <circle cx="58" cy="110" r="3.5" fill="#1d5ff0"/>
+</svg>
