@@ -1,0 +1,7 @@
+{
+  "asOf": "2026-11-18",
+  "machines": [
+    { "name": "Mac", "input": 44433, "output": 17216722, "cacheWrite": 81216885, "cacheRead": 2996550352, "total": 3095028392 },
+    { "name": "Windows", "input": 1390118, "output": 17144807, "cacheWrite": 131034775, "cacheRead": 5582949102, "total": 5732552822 }
+  ]
+}
