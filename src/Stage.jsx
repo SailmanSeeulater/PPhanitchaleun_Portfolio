@@ -2399,6 +2399,22 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
 .tk__table tfoot :is(th,td){border-top:1px solid var(--ink);border-bottom:none;font-weight:700;}
 .tk__table tfoot td:last-child{color:#c15f3c;}
 .tk__foot{flex:none;margin:0;padding:10px 20px 12px;border-top:1px dashed var(--rule);font-size:11px;font-style:italic;color:var(--ink-soft);}
+/* on a small laptop screen the window can't be its full size, so everything in it is sized from the window
+   itself: the type and the gaps shrink together and the table still fits without scrolling. The window also
+   leaves room for the step aside it takes when it opens beside another. */
+@media (min-width:761px){
+  .app[data-id="tokens"]{width:min(var(--win-w),calc(100% - 64px));}
+  .app[data-id="tokens"] .app__body{container-type:size;}
+  .tk{font-size:clamp(9px,1.84cqw,12.5px);}
+  .tk__head{padding:clamp(7px,6.3cqh,16px) clamp(10px,2.95cqw,20px) clamp(5px,4.7cqh,12px);}
+  .tk__head b{font-size:clamp(14px,3.25cqw,22px);}
+  .tk__head span{font-size:clamp(8.5px,1.7cqw,11.5px);}
+  .tk__scroll{padding:0 clamp(10px,2.95cqw,20px);}
+  .tk__table :is(th,td){padding:clamp(2px,2.8cqh,7px) 0 clamp(2px,2.8cqh,7px) clamp(6px,2.65cqw,18px);}
+  .tk__table thead th{font-size:clamp(7.5px,1.55cqw,10.5px);}
+  .tk__table td{font-size:clamp(7.5px,1.7cqw,11.5px);}
+  .tk__foot{padding:clamp(4px,4cqh,10px) clamp(10px,2.95cqw,20px) clamp(5px,4.7cqh,12px);font-size:clamp(8px,1.62cqw,11px);}
+}
 /* too narrow for six columns: each machine becomes a little card, every number labelled */
 @media (max-width:760px){
   .tk__table,.tk__table :is(tbody,tfoot,tr,th,td){display:block;}
