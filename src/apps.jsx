@@ -1,4 +1,5 @@
-// The small apps on the laptop's dock (Finder, Safari, Slack, Claude, VSCodium, Ghostty, FL Studio, Tailscale, Docker)
+// The small apps on the laptop's dock (Finder, Safari, Slack, Claude, VSCodium, Ghostty, FL Studio, Tailscale, Docker,
+// and Discord, which lives in discord.jsx and loads when it's opened)
 // and their styles. Each one is a toy that does one real thing; none of them talks to a server of mine. This file is only fetched when one of
 // them is first opened (or once the page has gone quiet), so it brings its own styles with it.
 import { Suspense, lazy, useEffect, useReducer, useRef, useState } from "react";
@@ -9,6 +10,7 @@ import { store, stored } from "./storage";
 
 // The first-person game is bigger than everything else here, so it is fetched only when someone runs it.
 const BelowDeck = lazy(() => import("./belowdeck"));
+const DiscordApp = lazy(() => import("./discord"));
 
 const KINDS = { folder: "Folder", app: "Application", link: "Web location", text: "Plain text", project: "Markdown", image: "Image", pdf: "PDF document" };
 
@@ -1600,6 +1602,9 @@ const APPS_CSS = `
   .dd__row--img .dd__stack{grid-column:1 / -1;}
 }
 
+/* Discord's own styles come with it; until they have, its window is already its dark grey */
+.dc-wait{background:#313338;}
+
 /* phones: one column each, the sidebars step out */
 @media (max-width:760px){
   .fd,.vs,.sl{grid-template-columns:minmax(0,1fr);}
@@ -1634,6 +1639,11 @@ export default function MiniApp({ id, drive, finderAt, email, links, more, onOpe
       {id === "flstudio" && <SequencerApp />}
       {id === "tailscale" && <TailscaleApp />}
       {id === "docker" && <DockerApp />}
+      {id === "discord" && (
+        <Suspense fallback={<div className="dc-wait" />}>
+          <DiscordApp />
+        </Suspense>
+      )}
     </>
   );
 }

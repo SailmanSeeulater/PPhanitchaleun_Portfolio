@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "api": "cd server && go run . -dev",
     "usage": "node scripts/ai-usage.mjs",
+    "discord": "node scripts/discord-profile.mjs",
     "resume": "swift scripts/resume-image.swift .",
     "og": "swift scripts/og-image.swift http://localhost:5199/ public/og.jpg"
   },
