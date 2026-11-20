@@ -73,7 +73,10 @@ const DOCK_EXTRAS = [
   { id: "mordi", name: "Mordi", app: true },
   { id: "tailscale", name: "Tailscale", app: true },
   { id: "docker", name: "Docker", app: true, icon: "/icons/dock/docker.svg" },
+  { id: "discord", name: "Discord", app: true, icon: "/icons/dock/discord.svg" },
 ];
+const DOCK_IDS = DOCK_EXTRAS.map((x) => x.id);
+const DOCK_BY_ID = Object.fromEntries(DOCK_EXTRAS.map((x) => [x.id, x]));
 // The little windows the dock's apps open, Finder's included.
 const MINI = [{ id: "finder", name: "Finder" }, ...DOCK_EXTRAS.filter((x) => x.app)];
 // More favourites for Safari's start page, beside the live projects. One with no icon gets a coloured letter.
@@ -515,9 +518,11 @@ const stored = (key) => {
     return null;
   }
 };
+// Passing null removes the key.
 const store = (key, value) => {
   try {
-    localStorage.setItem(key, value);
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
   } catch {
     /* storage unavailable */
   }
@@ -892,6 +897,176 @@ function tick(up) {
 const clamp = (n, low, high) => Math.min(Math.max(n, low), high);
 const onPhone = () => window.matchMedia("(max-width:760px)").matches;
 
+/* ---- the order of my apps on the dock. A visitor can drag them along it (on a phone, press and hold one, then
+   drag it around the home screen), or move the one in focus with Alt and an arrow key. The order is kept in their
+   own browser: theirs alone, and still there when they come back. An app added to the dock later joins at the end,
+   and View, Reset Dock puts things back. ---- */
+const sameOrder = (a, b) => a.length === b.length && a.every((id, i) => id === b[i]);
+function readDockOrder() {
+  try {
+    const saved = JSON.parse(stored("stage-dock") ?? "null");
+    if (!Array.isArray(saved)) return DOCK_IDS;
+    const kept = [...new Set(saved)].filter((id) => DOCK_IDS.includes(id));
+    return [...kept, ...DOCK_IDS.filter((id) => !kept.includes(id))];
+  } catch {
+    return DOCK_IDS;
+  }
+}
+// Where an icon's place is on the page, leaving out any slide it's in the middle of.
+const placeOf = (li) => {
+  const base = li.offsetParent.getBoundingClientRect();
+  return { x: base.left + li.offsetLeft, y: base.top + li.offsetTop, w: li.offsetWidth, h: li.offsetHeight };
+};
+const GLIDE = "translate .25s cubic-bezier(.2,.8,.2,1)";
+
+// listRef is the dock's list, which holds the icons.
+function useDockOrder(listRef) {
+  const [order, setOrder] = useState(readDockOrder);
+  const [dragging, setDragging] = useState(null);
+  const gesture = useRef(null);
+  const before = useRef(null);
+  const swallow = useRef(false);
+
+  // The pointer's side of it, made once, so the listeners it adds are the same ones it takes away.
+  const [drag] = useState(() => {
+    const icons = () => [...(listRef.current?.querySelectorAll("li[data-dock]") ?? [])];
+    // Remembers where every icon is before the order changes, so the others can glide to their new places after.
+    const reorder = (next) => {
+      before.current = Object.fromEntries(icons().map((li) => [li.dataset.dock, placeOf(li)]));
+      setOrder(next);
+    };
+    // The icon being dragged sits under the pointer, wherever its place in the order is now.
+    const follow = () => {
+      const g = gesture.current;
+      const at = placeOf(g.li);
+      g.li.style.translate = `${g.x - g.grabX - at.x}px ${g.y - g.grabY - at.y}px`;
+    };
+    const hold = (e) => e.preventDefault();
+    const start = () => {
+      const g = gesture.current;
+      if (!g) return;
+      const at = placeOf(g.li);
+      g.grabX = g.x0 - at.x;
+      g.grabY = g.y0 - at.y;
+      g.active = true;
+      g.li.style.transition = "none";
+      setDragging(g.id);
+      // a finger that's dragging an icon doesn't scroll the page as well
+      if (g.touch) document.addEventListener("touchmove", hold, { passive: false });
+      follow();
+    };
+    const end = (e) => {
+      const g = gesture.current;
+      if (!g || (e && e.pointerId !== g.pointerId)) return;
+      clearTimeout(g.timer);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      document.removeEventListener("touchmove", hold);
+      gesture.current = null;
+      if (!g.active) return;
+      // the press that ends a drag isn't also a click that opens the app
+      swallow.current = true;
+      setTimeout(() => (swallow.current = false), 0);
+      g.li.style.transition = GLIDE;
+      g.li.style.translate = "";
+      setDragging(null);
+    };
+    const move = (e) => {
+      const g = gesture.current;
+      if (!g || e.pointerId !== g.pointerId) return;
+      g.x = e.clientX;
+      g.y = e.clientY;
+      if (!g.active) {
+        // a mouse starts dragging once it moves; a finger that moves before it has held still is scrolling
+        const far = Math.hypot(g.x - g.x0, g.y - g.y0);
+        if (g.touch) return far > 8 && end(e);
+        if (far <= 5) return;
+        start();
+      }
+      follow();
+      // Its new place: past every icon whose middle the pointer has gone by. Along the one row of the dock that's
+      // left to right; on a phone's grid, the rows above it and the ones to its left in its own row.
+      const all = icons();
+      const others = all.filter((li) => li !== g.li).map(placeOf);
+      const oneRow = others.every((p) => Math.abs(p.y - others[0].y) < 4);
+      const at = others.filter((p) => {
+        const cx = p.x + p.w / 2;
+        const cy = p.y + p.h / 2;
+        return oneRow || Math.abs(g.y - cy) < p.h / 2 ? cx < g.x : cy < g.y;
+      }).length;
+      const now = all.indexOf(g.li);
+      if (at === now) return;
+      const ids = all.map((li) => li.dataset.dock);
+      ids.splice(now, 1);
+      ids.splice(at, 0, g.id);
+      reorder(ids);
+    };
+    const down = (e, id) => {
+      if (e.button !== 0 || gesture.current) return;
+      const touch = e.pointerType === "touch";
+      gesture.current = { id, li: e.currentTarget, pointerId: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, touch, active: false, timer: 0 };
+      if (touch) gesture.current.timer = setTimeout(start, 380);
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", end);
+      window.addEventListener("pointercancel", end);
+    };
+    return { down, end, follow, reorder };
+  });
+
+  useEffect(() => {
+    store("stage-dock", sameOrder(order, DOCK_IDS) ? null : JSON.stringify(order));
+  }, [order]);
+  useEffect(() => () => drag.end(), [drag]);
+
+  // After the order changes, each icon that moved starts from where it was and glides to its new place.
+  useLayoutEffect(() => {
+    const was = before.current;
+    if (!was) return;
+    before.current = null;
+    for (const li of listRef.current?.querySelectorAll("li[data-dock]") ?? []) {
+      const from = was[li.dataset.dock];
+      if (!from || li === gesture.current?.li) continue;
+      const to = placeOf(li);
+      if (from.x === to.x && from.y === to.y) continue;
+      li.style.transition = "none";
+      li.style.translate = `${from.x - to.x}px ${from.y - to.y}px`;
+      li.getBoundingClientRect();
+      li.style.transition = GLIDE;
+      li.style.translate = "";
+    }
+    if (gesture.current?.active) drag.follow();
+  }, [order, drag, listRef]);
+
+  return {
+    order,
+    dragging,
+    isDefault: sameOrder(order, DOCK_IDS),
+    down: drag.down,
+    reset: () => drag.reorder(DOCK_IDS),
+    // Alt and an arrow key move the icon in focus one place along.
+    nudge: (e, id) => {
+      const step = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[e.key];
+      if (!e.altKey || !step) return;
+      e.preventDefault();
+      const i = order.indexOf(id);
+      const j = i + step;
+      if (j < 0 || j >= order.length) return;
+      const next = [...order];
+      next.splice(i, 1);
+      next.splice(j, 0, id);
+      drag.reorder(next);
+    },
+    swallowClick: (e) => {
+      if (!swallow.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+    },
+    // a long press is the start of a drag, not a call for the browser's menu
+    noMenu: (e) => gesture.current && e.preventDefault(),
+  };
+}
+
 function AppWindow({ win, name, wide, flush, front, alone, originOf, screenRef, onFocus, onClose, onMin, onMax, onGone, children }) {
   const ref = useRef(null);
   const [phase, setPhase] = useState("in");
@@ -1098,6 +1273,8 @@ export default function Stage() {
   const [finderAt, setFinderAt] = useState([]);
   const drive = useMemo(() => makeDrive({ sections: APPS, links: LINKS, photos: BOAT_PHOTOS }), []);
   const dockRef = useRef(null);
+  const dockListRef = useRef(null);
+  const dock = useDockOrder(dockListRef);
   const stackRef = useRef(null);
   const ipwRef = useRef(null);
 
@@ -1415,7 +1592,11 @@ export default function Stage() {
       ],
     },
     { id: "go", name: "Go", items: [...APPS, WELCOME].map((a) => ({ name: a.name, run: () => openWin(a.id) })) },
-    { id: "view", name: "View", items: THEMES.map((t) => ({ name: t.name, on: t.id === theme, run: () => setTheme(t.id) })) },
+    {
+      id: "view",
+      name: "View",
+      items: [...THEMES.map((t) => ({ name: t.name, on: t.id === theme, run: () => setTheme(t.id) })), { name: "Reset Dock", off: dock.isDefault, run: dock.reset }],
+    },
     {
       id: "window",
       name: "Window",
@@ -1524,7 +1705,14 @@ export default function Stage() {
                 {/* the dock, like a Mac's: Finder and Music, my own apps, then two folders */}
                 <nav className="dk" aria-label="Dock" ref={dockRef}>
                   {nudge && <p className="dk__nudge">Pick one to open it</p>}
-                  <ul className="dk__dock">
+                  <ul
+                    className="dk__dock"
+                    ref={dockListRef}
+                    data-dragging={dock.dragging ? "" : undefined}
+                    onClickCapture={dock.swallowClick}
+                    onContextMenu={dock.noMenu}
+                    onDragStart={(e) => e.preventDefault()}
+                  >
                     <li data-app="finder" className={isOpen("finder") ? "is-running" : undefined}>
                       <button type="button" onClick={() => openWin("finder")} data-umami-event="dock-finder">
                         <img className="dk__tile" src="/icons/dock/finder.png" alt="" width="96" height="96" />
@@ -1540,21 +1728,29 @@ export default function Stage() {
                       </button>
                     </li>
                     <li className="dk__sep" aria-hidden="true" />
-                    {DOCK_EXTRAS.map((x) => {
+                    {dock.order.map((id) => {
+                      const x = DOCK_BY_ID[id];
                       const face = (
                         <>
-                          <img className="dk__tile" src={x.icon ?? `/icons/dock/${x.id}.png`} alt="" width="96" height="96" />
+                          <img className="dk__tile" src={x.icon ?? `/icons/dock/${x.id}.png`} alt="" width="96" height="96" draggable={false} />
                           <b>{x.name}</b>
                         </>
                       );
                       return (
-                        <li key={x.id} data-app={x.app ? x.id : undefined} className={isOpen(x.id) ? "is-running" : undefined}>
+                        <li
+                          key={x.id}
+                          data-dock={x.id}
+                          data-app={x.app ? x.id : undefined}
+                          data-lifted={dock.dragging === x.id ? "" : undefined}
+                          className={isOpen(x.id) ? "is-running" : undefined}
+                          onPointerDown={(e) => dock.down(e, x.id)}
+                        >
                           {x.href ? (
-                            <a href={x.href} target="_blank" rel="noreferrer" data-umami-event={`dock-${x.id}`}>
+                            <a href={x.href} target="_blank" rel="noreferrer" data-umami-event={`dock-${x.id}`} onKeyDown={(e) => dock.nudge(e, x.id)} aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight">
                               {face}
                             </a>
                           ) : (
-                            <button type="button" onClick={() => openWin(x.id)} data-umami-event={`dock-${x.id}`}>
+                            <button type="button" onClick={() => openWin(x.id)} data-umami-event={`dock-${x.id}`} onKeyDown={(e) => dock.nudge(e, x.id)} aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight">
                               {face}
                             </button>
                           )}
@@ -2065,6 +2261,17 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
 @keyframes nudge{0%{opacity:0;translate:0 6px;}8%,78%{opacity:1;translate:0 0;}100%{opacity:0;translate:0 0;}}
 .dk__dock :is(button,a):is(:hover,:focus-visible){translate:0 calc(var(--ic) * -.14);}
 .dk__dock :is(button,a):active .dk__tile{scale:.92;}
+/* my apps can be picked up and dragged into another order: the one held rides above the rest, a little bigger,
+   and the others slide aside for it. Nothing lifts or shows its name meanwhile. */
+.dk__dock li[data-dock]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;}
+.dk__dock img{-webkit-user-drag:none;}
+.stage .dk__dock[data-dragging],.stage .dk__dock[data-dragging] :is(button,a){cursor:grabbing;}
+.stage .dk__dock[data-dragging] :is(button,a){translate:none;}
+.stage .dk__dock li[data-lifted]{z-index:5;}
+.stage .dk__dock li[data-lifted] .dk__tile{scale:1.1;filter:drop-shadow(0 10px 12px color-mix(in srgb,var(--shadow) 35%,transparent));}
+@media (min-width:761px){
+  .stage .dk__dock[data-dragging] :is(button,a) b{opacity:0;}
+}
 
 /* ---- a dock folder, open: a grid of its apps on glass, above its icon, pointing down at it ---- */
 .stk{
@@ -2164,7 +2371,15 @@ span.dk__tile--folder{width:calc(var(--ic) * .9);margin:calc(var(--ic) * .05);ba
 .app[data-id="mordi"] .app__bar{background:#e3edda;border-color:rgba(27,34,21,.16);}
 .app[data-id="mordi"] .app__bar p{color:#1b2215;}
 .app[data-id="slack"] .app__bar{background:#350d36;border-color:#350d36;}
-.app:is([data-id="ghostty"],[data-id="vscodium"],[data-id="obsidian"],[data-id="slack"],[data-id="flstudio"]) .app__bar p{color:#d6d6d6;}
+.app[data-id="discord"] .app__bar{background:#1e1f22;border-color:#1e1f22;}
+/* Discord holds three columns, the way the real one does, so it opens about as big as the five sections */
+@media (min-width:761px){
+  .stage .app[data-id="discord"]:not([data-max]){
+    --win-t:calc(var(--mb) + clamp(6px,.8vw,12px));--win-l:clamp(18px,5vw,96px);
+    inset:var(--win-t) var(--win-l) calc(var(--desk-pad) + var(--ic) * 1.34 + 18px);
+  }
+}
+.app:is([data-id="ghostty"],[data-id="vscodium"],[data-id="obsidian"],[data-id="slack"],[data-id="flstudio"],[data-id="discord"]) .app__bar p{color:#d6d6d6;}
 .app[data-id="claude"],.app[data-id="claude"] .app__bar{background:color-mix(in srgb,#d97757 5%,var(--bg));}
 .app[data-id="claude"] .app__bar{border-bottom:none;}
 
